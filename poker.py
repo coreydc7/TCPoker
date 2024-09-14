@@ -184,7 +184,10 @@ class TexasHoldEm:
         self.move_dealer_position()
     
     def move_dealer_position(self):
-        # Moves dealer incrementer to next position
+        '''Moves dealer incrementer to next position
+           Even though the server is handling all dealing, 
+           it is still important to keep track of the dealer 
+           to determine proper betting order'''
         self.dealer_position = (self.dealer_position + 1) % self.num_players
         
         
@@ -333,8 +336,8 @@ class TexasHoldEm:
 
 # Main game loop
 if __name__ == "__main__":
-    num_players = int(input("Enter the number of players (2-4): "))
-    while not (2 <= num_players <= 4):
-        num_players = int(input("Enter a valid number of players (2-4): "))
+    num_players = int(input("Enter the number of players (2-9): "))
+    while not (2 <= num_players <= 9):
+        num_players = int(input("Enter a valid number of players (2-9): "))
     game = TexasHoldEm(num_players)
     game.play_hand()
