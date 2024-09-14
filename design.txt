@@ -1,0 +1,39 @@
+Texas Hold’em Poker
+•	The dealer deals everyone 5 cards
+•	Initial bets are placed
+•	Players request new cards, throwing away a portion of their old cards, forming the best hand possible
+•	Another round of bets takes place
+•	Players still standing show their cards
+•	The player with the best hand takes the pot
+•	Must be at least 3 players, recommended 4-8
+
+Server would be the dealer, dealing cards to all players (clients)
+Clients compete against each other for the best hand
+Best hand wins
+Each player plays by betting money
+Ante game: everyone has to put a predetermined amount of money in the pot before being dealt any cards (controlled by server?)
+After entering the pot, dealer deals everyone 5 cards. 
+The options are then to check, call, raise, fold
+	Checking: betting 0, ONLY if no bets have been placed can you check. The second someone places a bet, players must call (match), raise (increase), or fold
+	Calling is when you match the bet that's on the table. If the maximum bet was 10 cents, then you must put in 10 cents to play
+	Raise: when you increase the maximum bet on the table. Players must then match your new max bet if they want to continue to play
+	Folding: withdrawing from the pot. The player lost the initial ante money, plus any additional bet money
+There would be a maximum 2 rounds of betting, unless everyone – 1 folded their hand
+The first round begins after everyone is dealt their initial 5-card hand. Goes around the table
+After everyone has performed their action, begin the draw round:
+Players give the dealer the cards they don’t want in exchange for the same amount of new cards in return; the hand is still (and always is) comprised of 5 cards. 
+After everyone receives their semi-new hands, another round of betting takes place starting with the same person as last round. Same protocol 
+When it’s down to two players, its showdown time. Both players lay their cards down and compares hands, and winner takes the pot. Could make it so that the last player to 
+Starting person rotates to next person
+A check is only valid if no one else bets after you (all players must check). If someone bets after a check, the checker must match the bet
+Once a bet is made, all players must at least match that bet to remain in the hand
+The betting round is not complete until all active players have either matched the highest bet or folded
+Betting round will continue until one of these conditions is met:
+	All players have called the highest bet 
+	Or All but one player have folded
+Betting round is not over until all players have had a chance to respond to the highest bet
+
+
+> Welcome to 5 card draw Poker
+> Enter the game PIN: 1234567
+> You’ve joined the game!
