@@ -1,3 +1,5 @@
+Test an exact tie to make sure everyone receives fair share
+
 Ace-low straight (A-2-3-4-5): This is the lowest straight and should be ranked below other straights
 
 Same hand rank, different kickers:
