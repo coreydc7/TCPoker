@@ -1,6 +1,6 @@
 import random
 from enum import Enum, IntEnum
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import List, Tuple
 from collections import Counter
 from itertools import combinations
@@ -60,18 +60,44 @@ class Card:
         if not isinstance(other, Card):
             return NotImplemented
         return (self.rank.value) < (other.rank.value)
+   
+@dataclass 
+class Player:
+    stack: int
+    hand: List[Card] = field(default_factory=list)
+    
+    def add_card(self, card: Card):
+        self.hand.append(card)
+        
+    def clear_cards(self):
+        self.hand.clear()
+        
+    def bet(self, amount: int):
+        if amount > self.stack:
+            raise ValueError("Not enough chips to bet")
+        self.stack -= amount
+        return amount
+    
+    def win(self, amount: int):
+        self.stack += amount
+        
+    def __str__(self) -> str:
+        return f"Stack: ${self.stack}, hand: {', '.join(str(card) for card in self.hand)}"
+        
     
 
 '''The entire gamestate is stored using this class '''
 class TexasHoldEm:
-    def __init__(self, num_players, seed=None):
+    def __init__(self, num_players, starting_stack=100, seed=None):
         self.num_players = num_players
         self.random = random.Random(seed)
         self.deck = self.create_deck()
         self.community_cards = []
-        self.players = [[] for _ in range(num_players)]
+        self.players = [Player(starting_stack) for _ in range(num_players)]
         self.pot = 0
         self.dealer_position = 0
+        self.small_blind = 0
+        self.big_blind = 0
         
     def create_deck(self) -> List[Card]:
         ''' Create and shuffle a standard 52-card deck '''
@@ -83,12 +109,46 @@ class TexasHoldEm:
         ''' Deal 2 hole cards to each player '''
         for _ in range(2):
             for player in self.players:
-                player.append(self.deck.pop())
+                player.add_card(self.deck.pop())
+        
                 
     def deal_community_cards(self, num_cards):
         ''' Pop num_cards cards from the deck and add to community cards '''
         for _ in range(num_cards):
             self.community_cards.append(self.deck.pop())
+            
+    def post_blinds(self):
+        if self.num_players == 2:
+            small_blind = self.dealer_position
+            big_blind = (self.dealer_position + 1) % 2
+            
+            print(f"Player {small_blind} is the small blind.")
+            print(f"Player {big_blind} is the big blind.")
+            
+            bets = [small_blind, big_blind]
+            self.ask_for_bets(bets)
+        else:
+            small_blind = (self.dealer_position + 1) % self.num_players
+            big_blind = (self.dealer_position + 2) % self.num_players
+            
+            print(f"Player {small_blind} is the small blind")
+            print(f"Player {big_blind} is the big blind")
+            
+    def ask_for_bets(self, bets: List[int]):
+        small_blind = int(input(f"Player {bets[0]}, How much would you like to bet? (small blind) \n You have: {self.players[bets[0]].stack} \n"))
+        big_blind = int(input(f"Player {bets[1]}, How much would you like to bet? It must be atleast 2x the small blind (${small_blind * 2}) (big blind) \n You have: {self.players[bets[1]].stack} \n"))
+        while not (big_blind >= small_blind * 2):
+            big_blind = int(input(f"Please enter a valid amount. It must be atleast 2x the small blind (${small_blind * 2}) \n"))
+
+        try:
+            self.pot += self.players[bets[0]].bet(small_blind)
+            self.pot += self.players[bets[1]].bet(big_blind)
+        except ValueError as e:
+            print(e)    # TODO: Retry in the case where a player can't afford the bet
+        
+        print(f"Player {bets[0]} bet ${small_blind}.")
+        print(f"Player {bets[1]} bet ${big_blind}")
+        
             
     def betting_round(self):
         # ''' TODO: Implement betting logic when client connectivity is here '''
@@ -96,20 +156,17 @@ class TexasHoldEm:
         #     msg = int(input(f"Player {i}, how much would you like to bet?: $"))
         #     self.pot += msg
         #     print(f"Player {i} bet ${msg}")
-        pass
+        print("Begin betting round.\n")
     
     def play_hand(self):
         ''' Main game flow for each hand '''
-        self.reset_game() 
         self.deal_hole_cards()  # Pre-flop 
         
-        i = 0
-        for player in self.players:   # TODO: Delete this when client functionality implemented
-            print(f"Player: {i} \n")
-            self.print_cards(player)
-            i += 1
-            
-        self.betting_round() 
+        self.post_blinds()   # Small and big blinds (forced bets) 
+        self.betting_round()    # First betting round takes place
+        
+        self.show_player_hands()   # TODO: Delete this when client functionality implemented
+
         print("Pre-flop completed") 
         print(f"Current pot is: ${self.pot}")
         
@@ -118,11 +175,7 @@ class TexasHoldEm:
         self.deal_community_cards(3) # Flop
         self.print_cards(self.community_cards) 
         
-        i = 0
-        for player in self.players:   # TODO: Delete this when client functionality implemented
-            print(f"Player: {i} \n")
-            self.print_cards(player)
-            i += 1
+        self.show_player_hands()   # TODO: Delete this when client functionality implemented
             
         self.betting_round()
         print("Flop completed") 
@@ -132,11 +185,7 @@ class TexasHoldEm:
         self.deal_community_cards(1) # Turn
         self.print_cards(self.community_cards) 
         
-        i = 0
-        for player in self.players:   # TODO: Delete this when client functionality implemented
-            print(f"Player: {i} \n")
-            self.print_cards(player)
-            i += 1
+        self.show_player_hands()   # TODO: Delete this when client functionality implemented
             
         self.betting_round()
         print("Turn completed") # Debug
@@ -146,11 +195,7 @@ class TexasHoldEm:
         self.deal_community_cards(1) # River
         self.print_cards(self.community_cards) 
         
-        i = 0
-        for player in self.players:   # TODO: Delete this when client functionality implemented
-            print(f"Player: {i} \n")
-            self.print_cards(player)
-            i += 1
+        self.show_player_hands()   # TODO: Delete this when client functionality implemented
             
         self.betting_round()
         print("River completed") # Debug
@@ -162,14 +207,20 @@ class TexasHoldEm:
         if isinstance(result[0], list):
             # Multiple winners
             winners, hand_rank = result
-            print(f"It's a tie! The winners are: {', '.join(str(player) for player in winners)}")
+            print(f"It's a tie! Pot split evenly amongst the winners: {', '.join(str(player) for player in winners)}")
             print (f"Winning hand: {hand_rank.name}")
+            
+            for player in winners:
+                player.win(self.pot / self.num_players)
         else:
             # Single winner
             winner, hand_rank = result
             print(f"The winner is Player {winner}")
             print(f"Winning hand: {hand_rank.name}")
+            self.players[winner].win(self.pot)
                 
+        self.reset_game() 
+
     def reset_game(self):
         ''' Resets the game state 
             Creates and shuffles a new deck
@@ -179,9 +230,12 @@ class TexasHoldEm:
             Moves dealer to next position'''
         self.deck = self.create_deck()
         self.community_cards = []
-        self.players = [[] for _ in range(self.num_players)]
+        for player in self.players:
+            player.clear_cards()
         self.pot = 0
         self.move_dealer_position()
+        self.small_blind = 0
+        self.big_blind = 0
     
     def move_dealer_position(self):
         '''Moves dealer incrementer to next position
@@ -195,8 +249,8 @@ class TexasHoldEm:
         ''' Determine who wins the pot 
             Returns (player_index, HankRank.)'''
         player_hands= []
-        for i, player_cards in enumerate(self.players):
-            best_hand = self.get_best_hand(player_cards + self.community_cards)
+        for i, player in enumerate(self.players):
+            best_hand = self.get_best_hand(player.hand + self.community_cards)
             player_hands.append((i, best_hand))
             
         # Create custom key function for sorting
@@ -316,6 +370,7 @@ class TexasHoldEm:
         return 0
     
     def print_cards(self, hand: List[Card]):
+        ''' Prints any cards passed to it. Useful for showing the community cards '''
         rows = ['','','','','']
         for card in hand:
             if (card.rank.value > 10):  # Display A, J, Q, K instead of value
@@ -326,9 +381,29 @@ class TexasHoldEm:
             rows[1] += '|{} | '.format(str(x).ljust(2))
             rows[2] += '| {} | '.format(str(card.suit.value))
             rows[3] += '|_{}| '.format(str(x).rjust(2, '_'))
-            
+        
         for row in rows:
             print(row)
+        rows.clear()
+    
+    def show_player_hands(self):
+        ''' Shows each players hand, used for debugging '''
+        for i in range(self.num_players):
+            print(f"Player {i}:")
+            rows = ['','','','','']
+            for card in self.players[i].hand:
+                if (card.rank.value > 10):  # Display A, J, Q, K instead of value
+                    x = card.rank.name
+                else:
+                    x = card.rank.value
+                rows[0] += ' ___  '  # Top line of the card
+                rows[1] += '|{} | '.format(str(x).ljust(2))
+                rows[2] += '| {} | '.format(str(card.suit.value))
+                rows[3] += '|_{}| '.format(str(x).rjust(2, '_'))
+            
+            for row in rows:
+                print(row)
+            rows.clear()
             
                 
     
