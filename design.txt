@@ -1,39 +1,67 @@
 Texas Hold’em Poker
-•	The dealer deals everyone 5 cards
-•	Initial bets are placed
-•	Players request new cards, throwing away a portion of their old cards, forming the best hand possible
-•	Another round of bets takes place
-•	Players still standing show their cards
-•	The player with the best hand takes the pot
-•	Must be at least 3 players, recommended 4-8
-
-Server would be the dealer, dealing cards to all players (clients)
-Clients compete against each other for the best hand
-Best hand wins
-Each player plays by betting money
-Ante game: everyone has to put a predetermined amount of money in the pot before being dealt any cards (controlled by server?)
-After entering the pot, dealer deals everyone 5 cards. 
-The options are then to check, call, raise, fold
-	Checking: betting 0, ONLY if no bets have been placed can you check. The second someone places a bet, players must call (match), raise (increase), or fold
-	Calling is when you match the bet that's on the table. If the maximum bet was 10 cents, then you must put in 10 cents to play
-	Raise: when you increase the maximum bet on the table. Players must then match your new max bet if they want to continue to play
-	Folding: withdrawing from the pot. The player lost the initial ante money, plus any additional bet money
-There would be a maximum 2 rounds of betting, unless everyone – 1 folded their hand
-The first round begins after everyone is dealt their initial 5-card hand. Goes around the table
-After everyone has performed their action, begin the draw round:
-Players give the dealer the cards they don’t want in exchange for the same amount of new cards in return; the hand is still (and always is) comprised of 5 cards. 
-After everyone receives their semi-new hands, another round of betting takes place starting with the same person as last round. Same protocol 
-When it’s down to two players, its showdown time. Both players lay their cards down and compares hands, and winner takes the pot. Could make it so that the last player to 
-Starting person rotates to next person
-A check is only valid if no one else bets after you (all players must check). If someone bets after a check, the checker must match the bet
-Once a bet is made, all players must at least match that bet to remain in the hand
-The betting round is not complete until all active players have either matched the highest bet or folded
-Betting round will continue until one of these conditions is met:
-	All players have called the highest bet 
-	Or All but one player have folded
-Betting round is not over until all players have had a chance to respond to the highest bet
+*	2-9 Players
+*	Server manages the deck and all dealing of cards
+*	Create a 52-card deck (13 of each suite, no jokers) and shuffle it 
+* 	Deal each player 2 hole cards
+* 	Have the first betting round (small, large blind)
+* 	Flop, pop 3 cards from the deck and append to community card list
+*	Have the second betting round
+*	Turn, pop 1 card from the deck and append to community card list
+*	Have the third betting round
+*	River, pop 1 card from the deck and append to community card list
+*	Have the final betting round
+*	Determine the winner of the pot (if there are still >=2 players who haven't folded)
+	*	Each player will have to manually determine their best 5-card poker hand 
+	*	There will be a "cheat" toggle to algorithmically determine the best possible 5-card poker hand if desired
+	*	Ties will be handled by splitting the pot evenly amongst all players. 
+*	Reset the game state 	
 
 
-> Welcome to 5 card draw Poker
-> Enter the game PIN: 1234567
-> You’ve joined the game!
+
+Server is the dealer, dealing cards to all players (clients)
+	Although server is dealing, we still need a 'dealer' position to determine proper betting order
+The functionality of betting rounds will have to vary depending on how many players there are:
+	2-players (aka heads-up play):
+		dealer index = small blind
+		dealer index + 1 = big blind
+		dealer index goes first pre-flop
+		dealer index goes last post-flop
+	3+ players (standard):
+		dealer index + 1 = small blind
+		dealer index + 2 = big blind
+		dealer index + 3 goes first pre-flop (under the gun)
+		dealer index + 1 goes first post-flop
+
+	Rules:
+	Small blind can be however much 
+	Big blind is atleast 2x small blind
+	Action continues clockwise (+1) through all players after starting player
+	Each player can call (match the big blind), raise (increase bet amount), or fold.
+	Traditionally, minimum raise is the size of the previous bet or raise in that round. (size of the big blind for round 1)
+	If no one has raised when the action gets to the big blind, they can "check" (stay in without adding more money) or raise
+
+
+
+
+
+
+Example client output
++-----------------------------------+-----------------------------------+--+--+--+
+| Client 1                          | Client 2                          |  |  |  |
++-----------------------------------+-----------------------------------+--+--+--+
+| > Welcome to Texas Hold'Em Poker! |                                   |  |  |  |
+|                                   |                                   |  |  |  |
+| Enter the game PIN: 123456        |                                   |  |  |  |
+| You've joined the table!          |                                   |  |  |  |
+| Current players: 0                |                                   |  |  |  |
+|                                   |                                   |  |  |  |
+|                                   | > Welcome to Texas Hold'Em Poker! |  |  |  |
+|                                   |                                   |  |  |  |
+|                                   | Enter the game PIN: 123456        |  |  |  |
+|                                   | You've joined the table!          |  |  |  |
+|                                   | Current players: 1                |  |  |  |
++-----------------------------------+-----------------------------------+--+--+--+
+|                                   |                                   |  |  |  |
++-----------------------------------+-----------------------------------+--+--+--+
+|                                   |                                   |  |  |  |
++-----------------------------------+-----------------------------------+--+--+--+
