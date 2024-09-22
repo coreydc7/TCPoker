@@ -1,0 +1,71 @@
+Project Title:
+Poker
+
+Team:
+Corey Collins 
+
+Project Objective:
+[Briefly describe the goal of the project. What problem are you trying to solve or what functionality are you aiming to achieve?]
+This project aims to implement a complete implementation of Texas Hold'em Poker, playable from the command-line. A central server will handle 2-9 continuous client connections, and
+allow them to play poker against eachother. The server will manage the game state, such as managing the deck and dealing cards, meanwhile the clients will be the ones betting and selecting their winning hand.
+There will be an algorithm to automatically determine the best poker hand, if players would prefer to focus on betting strategy.
+
+Scope:
+    Inclusions:
+    [List the specific tasks, features, or components that will be included in the project.]
+    2-9 clients can connect to the server and play poker against eachother, all using the command line
+    Server manages the game state, such as the deck and all dealing of cards
+    Players will manage all betting amounts, and selecting their best 5-card poker hand at the end
+    There will be an optional parameter to enable an algorithm to automatically determine the best poker hand, if players would rather focus on betting strategy.
+
+    Exclusions:
+    [List any tasks, features, or components that will not be included in the project.]
+
+Deliverables:
+[List the expected outputs or deliverables from the project, such as a working Python script, documentation, or presentations.]
+tcpserver.py - A functioning python script for a TCP server, to handle 2-9 concurrent client connections and the gamestate of Poker.
+tcpclient.py - A functioning python script for a TCP client, which will connect to the TCP server
+poker_test.py - A test file containing unit test confirming the functionality of the Poker game.
+
+Timeline:
+    Key Milestones:
+    [Outline the major milestones or checkpoints throughout the project, with estimated completion dates.]
+    Create a functioning offline Texas Hold'em game. (9/31)
+    Write unit tests to confirm the functionality of the Texas Hold'em game (11/15)
+    Create a functioning TCP Server that is able to accept 2-9 concurrent client connections and manage state. (10/31)
+    Create a functioning TCP Client that is able to connect to the TCP Server and send communications. (10/31)
+    Write unit tests to confirm the functionality of the TCP client and TCP server (11/15)
+    Combine the offline Texas Hold'em game with the TCP server, having client connections determine the player count (11/31)
+    Write unit tests to confirm overall functionality (12/16)
+
+    Task Breakdown:
+    [Create a detailed breakdown of tasks, assigning estimated hours or days to each.]
+    ???
+
+Technical Requirements:
+Hardware:
+[Specify any hardware requirements, such as servers, networking equipment, or specific devices.] 
+A computer to run the TCP Server script
+2-9 other computers to run the TCP client script
+Every computer should be connected to the internet
+
+Software:
+[List the necessary software tools, programming languages (Python), libraries (socket, threading, etc.), and operating systems.]
+Python, socket, threading, time, random, enum. 
+Any operating system will suffice
+
+Assumptions:
+[State any assumptions that are being made about the project, such as network connectivity or availability of resources.]
+A network connection on all computers is assumed.
+
+Roles and Responsibilities:
+[Define the roles of team members, including project manager, developers, testers, etc., and their responsibilities.]
+I will be solo leading this project, including all components.
+
+Communication Plan:
+[Outline the communication channels and frequency for project updates, meetings, and decision-making.]
+I am planning on frequent updates to this project
+
+Additional Notes:
+[Include any other relevant information or considerations that are specific to your project.]
+Extra-credit, such as a Web UI and Encryption will be attempted once there is a solid enough foundation in place.
