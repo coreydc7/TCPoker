@@ -8,7 +8,7 @@ class Message:
     ''' The message class only handles one message per connection. After the 
         response is written, there's nothing left for the server to do. It's completed its work '''
     
-    def __init__(self, selector, sock, addr):
+    def __init__(self, selector, sock, addr, debug):
         self.selector = selector
         self.sock = sock
         self.addr = addr
@@ -19,6 +19,7 @@ class Message:
         self.request = None
         self.response_created = False
         self.numPlayers = 0
+        self.debug = debug
         
     def _set_selector_events_mask(self, mode):
         ''' Set selector to listen for events: mode is 'r', 'w', or 'rw'. '''
@@ -50,7 +51,7 @@ class Message:
             
     def _write(self):
         if self._send_buffer:
-            print("sending", repr(self._send_buffer), "to", self.addr)
+            if(self.debug): print("sending", repr(self._send_buffer), "to", self.addr)
             try:
                 # Should be ready to write
                 sent = self.sock.send(self._send_buffer)
@@ -107,15 +108,13 @@ class Message:
         # }
         # return response
         action = self.request.get("action")
-        if action == "connect":
+        if action == "join":
             if (self.numPlayers < 9):
-                content = {"result": "connected"}
+                content = {"connect": "Welcome to TCPoker!","players": f'There are {self.numPlayers} other players connected.'}
                 self.numPlayers += 1
             else:
-                content = {"result": f'Error: invalid action "{action}".'}
+                content = {"connect": 'Error: too many players already at table.',"players": f'There are {self.numPlayers} other players connected.'}
                 
-        elif action == "status":
-            content = {"result": f'Number of players connected: {self.numPlayers}".'}
                 
         content_encoding = "utf-8"
         response = {
@@ -246,7 +245,7 @@ class Message:
         if self.jsonheader["content-type"] == "text/json":  # Decode and deserialize JSON
             encoding = self.jsonheader["content-encoding"]
             self.request = self._json_decode(data, encoding)
-            print("received request", repr(self.request), "from", self.addr)
+            if(self.debug): print("received request", repr(self.request), "from", self.addr)
         else:
             # Binary or unknown content-type
             self.request = data 
@@ -268,5 +267,3 @@ class Message:
         message = self._create_message(**response)
         self.response_created = True
         self._send_buffer += message
-        
-        # A response has 
