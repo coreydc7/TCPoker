@@ -5,7 +5,7 @@ import io
 import struct
 
 class Message:
-    def __init__(self, selector, sock, addr, request):
+    def __init__(self, selector, sock, addr, request, debug):
         self.selector = selector
         self.sock = sock
         self.addr = addr
@@ -16,6 +16,7 @@ class Message:
         self._jsonheader_len = None
         self.jsonheader = None
         self.response = None
+        self.debug = debug
         
     def _set_selector_events_mask(self, mode):
         """Set selector to listen for events: mode is 'r', 'w', or 'rw'."""
@@ -44,7 +45,7 @@ class Message:
             
     def _write(self):
         if self._send_buffer:
-            print("sending", repr(self._send_buffer), "to", self.addr)
+            if(self.debug): print("sending", repr(self._send_buffer), "to", self.addr)
             try:
                 # Should be ready to write
                 sent = self.sock.send(self._send_buffer)
@@ -81,8 +82,8 @@ class Message:
     
     def _process_response_json_content(self):
         content = self.response
-        result = content.get("result")
-        print(f"got result: {result}")
+        if "connect" and "players" in content:
+            print(f"{content.get('connect')} \n {content.get('players')}")
         
 
     def _process_response_binary_content(self):
@@ -126,7 +127,7 @@ class Message:
                 self._set_selector_events_mask("r")
                 
     def close(self):
-        print("closing connection to", self.addr)
+        if(self.debug): print("closing connection to", self.addr)
         try:
             self.selector.unregister(self.sock)
         except Exception as e:
@@ -195,12 +196,13 @@ class Message:
         content_len = self.jsonheader["content-length"]
         if not len(self._recv_buffer) >= content_len:
             return
+        
         data = self._recv_buffer[:content_len]
         self._recv_buffer = self._recv_buffer[content_len:]
         if self.jsonheader["content-type"] == "text/json":
             encoding = self.jsonheader["content-encoding"]
             self.response = self._json_decode(data, encoding)
-            print("received response", repr(self.response), "from", self.addr)
+            if(self.debug): print("received response", repr(self.response), "from", self.addr)
             self._process_response_json_content()
         else:
             # Binary or unknown content-type
@@ -212,4 +214,4 @@ class Message:
             self._process_response_binary_content()
              
         # Close when response has been processed
-        self.close() # Close connection
+        self.close()

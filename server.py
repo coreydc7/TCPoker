@@ -2,6 +2,7 @@ import sys
 import socket
 import selectors
 import traceback
+import argparse
 
 import libserver
 
@@ -11,17 +12,29 @@ def accept_wrapper(sock):
     conn, addr = sock.accept()  # Should be ready to read
     print("accepted connection from", addr)
     conn.setblocking(False)
-    message = libserver.Message(sel, conn, addr)
+    message = libserver.Message(sel, conn, addr, debug)
     ''' Associates a message object with a socket, initially set to be monitored 
     for read events only. Once its been read, we'll modify it to listen for 
     write events only '''
     sel.register(conn, selectors.EVENT_READ, data=message) 
     
-if len(sys.argv) != 3:
-    print("usage:", sys.argv[0], "<host> <port>")
-    sys.exit(1)
+''' Entry point into server.py '''
+parser = argparse.ArgumentParser(description="(help show the user how to run the server)")
+
+# Supported command-line args
+parser.add_argument('-i', '--ip', type=str, required=True, help='host-ip')
+parser.add_argument('-p', '--port', type=int, required=True, help='port')
+parser.add_argument('-v', '--verbose', action='store_true', help='Show detailed output, such as connection and disconnection events.')
+
+# Parse command-line args
+args = parser.parse_args()
     
-host, port = sys.argv[1], int(sys.argv[2])
+debug = False
+if(args.verbose):
+    debug = True
+host = args.ip
+port = args.port
+
 lsock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 # Avoid bind() exception: OSError: [Errno 48] Address already in use
 lsock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
