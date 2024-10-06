@@ -18,6 +18,7 @@ class Message:
         self.jsonheader = None
         self.request = None
         self.response_created = False
+        self.numPlayers = 0
         
     def _set_selector_events_mask(self, mode):
         ''' Set selector to listen for events: mode is 'r', 'w', or 'rw'. '''
@@ -58,9 +59,11 @@ class Message:
                 pass
             else:
                 self._send_buffer = self._send_buffer[sent:]
-                # Close connection when the buffer is drained. The response has been sent.
                 if sent and not self._send_buffer:
                     self.close()
+                # Once the message is sent, send buffer is drained
+                # Turn socket back into reading mode for next message
+                # self._set_selector_events_mask("r") 
                     
     def _json_encode(self, obj, encoding):
         return json.dumps(obj, ensure_ascii=False).encode(encoding)
@@ -103,7 +106,27 @@ class Message:
         #     "content_encoding": content_encoding,
         # }
         # return response
-        pass
+        action = self.request.get("action")
+        if action == "connect":
+            if (self.numPlayers < 9):
+                content = {"result": "connected"}
+                self.numPlayers += 1
+            else:
+                content = {"result": f'Error: invalid action "{action}".'}
+                
+        elif action == "status":
+            content = {"result": f'Number of players connected: {self.numPlayers}".'}
+                
+        content_encoding = "utf-8"
+        response = {
+            "content_bytes": self._json_encode(content, content_encoding),
+            "content_type": "text/json",
+            "content_encoding": content_encoding,
+        }
+        return response
+            
+                
+        
     
     def _create_response_binary_content(self):
         ''' Example handling binary actions '''
@@ -245,3 +268,5 @@ class Message:
         message = self._create_message(**response)
         self.response_created = True
         self._send_buffer += message
+        
+        # A response has 

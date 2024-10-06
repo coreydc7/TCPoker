@@ -92,7 +92,7 @@ class Message:
         
         if(repr_content[2:8] == "result"):
             action, value = struct.unpack(">6si", content)
-            print(f"{action.decode("utf-8")}: {value}")
+            print(f'{action.decode("utf-8")}: {value}')
             
     def process_events(self, mask):
         if mask & selectors.EVENT_READ:
@@ -210,5 +210,6 @@ class Message:
                 self.addr,
             )
             self._process_response_binary_content()
+             
         # Close when response has been processed
         self.close() # Close connection
