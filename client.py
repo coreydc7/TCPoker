@@ -8,7 +8,7 @@ import libclient
 
 sel = selectors.DefaultSelector()
 
-def create_request(action, value):
+def create_request(action):
     ''' Example json and binary requests '''
     # if action == "search":
     #     return dict(
@@ -28,6 +28,15 @@ def create_request(action, value):
     #         encoding="binary",
     #         content=bytes(action + value, encoding="utf-8"),
     #     )
+    if action == 'connect' or 'status':
+        return dict(
+            type="text/json",
+            encoding="utf-8",
+            content=dict(action=action)
+        )
+    else:
+        print("Unrecognized command. try 'connect' to join the game, or 'status' to view the status of the lobby.")
+        sys.exit(1)
         
 def start_connection(host, port, request):
     addr = (host, port)
@@ -36,21 +45,21 @@ def start_connection(host, port, request):
     sock.setblocking(False)
     sock.connect_ex(addr)
     events = selectors.EVENT_READ | selectors.EVENT_WRITE
-    message = libclient.Message(sel, sock, addr, request) # Creates a 'Message' object using the request dictionary
-    sel.register(sock, events, data=message) # Initially set to be monitored for read and write events, Once request has been written, modify it to listen for read events only. No longer interested in write events after the request has been sent
+    message = libclient.Message(sel, sock, addr, request) # Create a 'Message' object using the request dictionary
+    sel.register(sock, events, data=message)    # Register file object with selector
 
-if len(sys.argv) != 5:
-    print("usage:", sys.argv[0], "<host> <port> <action> <value>")
+if len(sys.argv) != 4:
+    print("usage:", sys.argv[0], "<host> <port> <action>")
     sys.exit(1)
     
 host, port = sys.argv[1], int(sys.argv[2])
-action, value = sys.argv[3], sys.argv[4]
-request = create_request(action, value) # creates a dictionary representing the request from the command-line arguments
+action = sys.argv[3]
+request = create_request(action) # creates a dictionary representing the request from the command-line arguments
 start_connection(host, port, request) # passes request into start_connection
 
 try:
     while True:
-        events = sel.select(timeout=1)
+        events = sel.select(timeout=1) # repeatedly executes on the 'timeout' interval
         for key, mask in events:
             message = key.data
             try:
