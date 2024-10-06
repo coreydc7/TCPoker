@@ -256,7 +256,13 @@ class TexasHoldEm:
         # Create custom key function for sorting
         def hand_key(hand):
             hand_rank, cards = hand[1]
-            return (hand_rank.value, tuple(card.rank.value for card in cards))
+            
+            # Adjust all ace-low straights to be lower than straights (as A=14)
+            card_values = [card.rank.value for card in cards]
+            if hand_rank == HandRank.STRAIGHT or HandRank.STRAIGHT_FLUSH and sorted(card_values) == [2,3,4,5,14]:
+                card_values = [1,2,3,4,5]
+                
+            return (hand_rank.value, tuple(sorted(card_values, reverse=True)))
         
         # Sort each players best hand by HandRank (descending) and then by card values
         sorted_hands = sorted(player_hands, key=hand_key, reverse=True)
@@ -311,7 +317,7 @@ class TexasHoldEm:
         return HandRank.HIGH_CARD
     
     def is_royal_flush(self, hand: List[Card]) -> bool:
-        return self.is_straight_flush(hand) and max(card.rank.value for card in hand) == 14
+        return self.is_straight_flush(hand) and  sum(card.rank.value for card in hand) == 60
     
     def is_straight_flush(self, hand: List[Card]) -> bool:
         return self.is_flush(hand) and self.is_straight(hand)
