@@ -5,8 +5,8 @@ import io
 import struct
 
 class Message:
-    ''' The message class only handles one message per connection. After the 
-        response is written, there's nothing left for the server to do. It's completed its work '''
+    ''' Handles multiple messages per connection by resetting state after each response.
+        Resets state after a _write(), and after creating a response'''
     
     def __init__(self, selector, sock, addr, debug):
         self.selector = selector
@@ -25,10 +25,13 @@ class Message:
         ''' Set selector to listen for events: mode is 'r', 'w', or 'rw'. '''
         if mode == 'r':
             events = selectors.EVENT_READ
+            if(self.debug): print("Socket switched to r")
         elif mode == 'w':
             events = selectors.EVENT_WRITE
+            if(self.debug): print("Socket switched to w")
         elif mode == 'rw':
             events = selectors.EVENT_READ | selectors.EVENT_WRITE
+            if(self.debug): print("Socket switched to rw")
         else:
             raise ValueError(f"Invalid events mask mode {repr(mode)}.")
         self.selector.modify(self.sock, events, data=self)
@@ -61,10 +64,11 @@ class Message:
             else:
                 self._send_buffer = self._send_buffer[sent:]
                 if sent and not self._send_buffer:
-                    self.close()
-                # Once the message is sent, send buffer is drained
-                # Turn socket back into reading mode for next message
-                # self._set_selector_events_mask("r") 
+                    # Once the message is sent, send buffer is drained
+                    # Turn socket back into reading mode for next message
+                    self._set_selector_events_mask("r") 
+                    # Reset state to handle the next message
+                    self._reset_state()
                     
     def _json_encode(self, obj, encoding):
         return json.dumps(obj, ensure_ascii=False).encode(encoding)
@@ -73,7 +77,11 @@ class Message:
         tiow = io.TextIOWrapper(
             io.BytesIO(json_bytes), encoding=encoding, newline=""
         )
-        obj = json.load(tiow)
+        try:
+            obj = json.load(tiow)
+        except json.JSONDecodeError as e:
+            print(f"JSONDecodeError during decoding (check header field lengths): {e}")
+            obj = None
         tiow.close()
         return obj
     
@@ -88,37 +96,36 @@ class Message:
         }
         jsonheader_bytes = self._json_encode(jsonheader, "utf-8")
         message_hdr = struct.pack(">H", len(jsonheader_bytes))
-        message = message_hdr + jsonheader_bytes + content_bytes    # Assemble message
-        return message
+        return message_hdr + jsonheader_bytes + content_bytes    # Assemble message
     
     def _create_response_json_content(self):
-        ''' Example json search action '''
-        # action = self.request.get("action")
-        # if action == "search":        
-        #     query = self.request.get("value")
-        #     answer = request_search.get(query) or f'No match for "{query}".'
-        #     content = {"result": answer}
-        # else:
-        #     content = {"result": f'Error: invalid action "{action}".'}
-        # content_encoding = "utf-8"
-        # response = {
-        #     "content_bytes": self._json_encode(content, content_encoding),
-        #     "content_type": "text/json",
-        #     "content_encoding": content_encoding,
-        # }
-        # return response
         action = self.request.get("action")
+        
         if action == "join":
             if (self.numPlayers < 9):
-                content = {"connect": "Welcome to TCPoker!","players": f'There are {self.numPlayers} other players connected.'}
                 self.numPlayers += 1
+                content = {"connect": "Welcome to TCPoker!","players": f'There are {self.numPlayers} player(s) connected.'}
             else:
-                content = {"connect": 'Error: too many players already at table.',"players": f'There are {self.numPlayers} other players connected.'}
-                
+                content = {"connect": 'Error: too many players already at table.',"players": f'There are currently {self.numPlayers} players connected.'}
+        
+        elif action == "status":
+            content = {"result": 'TODO: Display all players and their ready status'}
+        
+        elif action == "ready":
+            content = {"result": 'TODO: Mark the current player as ready.'}
+        
+        elif action == "exit":
+            print(f"Disconnecting {self.addr}")
+            self.close()
+            return None
+        
+        else:
+            content = {"result": f"Unknown action: '{action}'."}
                 
         content_encoding = "utf-8"
+        content_bytes = self._json_encode(content, content_encoding)
         response = {
-            "content_bytes": self._json_encode(content, content_encoding),
+            "content_bytes": content_bytes,
             "content_type": "text/json",
             "content_encoding": content_encoding,
         }
@@ -179,10 +186,8 @@ class Message:
                 self.process_request()
                 
     def write(self):
-        if self.request:
-            if not self.response_created:
+        if self.request and not self.response_created:
                 self.create_response()
-                
         self._write()
         
     def close(self):
@@ -264,6 +269,17 @@ class Message:
         else:
             # Binary or unknown content-type
             response = self._create_response_binary_content()
+       
         message = self._create_message(**response)
-        self.response_created = True
         self._send_buffer += message
+        self.response_created = True
+            
+        self._reset_state()
+            
+    def _reset_state(self):
+        ''' Reset the message state for the next request '''
+        self._recv_buffer = b""
+        self._jsonheader_len = None
+        self.jsonheader = None
+        self.request = None
+        self.response_created = False

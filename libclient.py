@@ -5,6 +5,9 @@ import io
 import struct
 
 class Message:
+    ''' Handles multiple messages per connection by resetting state after each response.
+        Resets state after a _write(), and after creating a response'''
+        
     def __init__(self, selector, sock, addr, request, debug):
         self.selector = selector
         self.sock = sock
@@ -42,6 +45,7 @@ class Message:
                 self._recv_buffer += data
             else:
                 raise RuntimeError("Peer closed.")
+        
             
     def _write(self):
         if self._send_buffer:
@@ -53,7 +57,10 @@ class Message:
                 # Resource temporarily unavailable (errno EWOULDBLOCK)
                 pass
             else:
+                # Once the message is sent, drain the sent buffer
                 self._send_buffer = self._send_buffer[sent:]
+                if sent and not self._send_buffer:
+                    self._reset_state()
 
     def _json_encode(self, obj, encoding):
         return json.dumps(obj, ensure_ascii=False).encode(encoding)
@@ -82,8 +89,12 @@ class Message:
     
     def _process_response_json_content(self):
         content = self.response
-        if "connect" and "players" in content:
+        
+        if "connect" in content:
             print(f"{content.get('connect')} \n {content.get('players')}")
+        if "result" in content:
+            print(content.get("result"))     
+            
         
 
     def _process_response_binary_content(self):
@@ -118,13 +129,11 @@ class Message:
     def write(self):
         if not self._request_queued:
             self.queue_request()
-
         self._write()
 
-        if self._request_queued:
-            if not self._send_buffer:
-                # Set selector to listen for read events, we're done writing.
-                self._set_selector_events_mask("r")
+        if self._request_queued and not self._send_buffer:
+            # Set selector to listen for r/w events
+            self._set_selector_events_mask("rw")
                 
     def close(self):
         if(self.debug): print("closing connection to", self.addr)
@@ -195,13 +204,19 @@ class Message:
     def process_response(self):
         content_len = self.jsonheader["content-length"]
         if not len(self._recv_buffer) >= content_len:
-            return
+            return # Waits until all data is received
         
         data = self._recv_buffer[:content_len]
         self._recv_buffer = self._recv_buffer[content_len:]
+        
         if self.jsonheader["content-type"] == "text/json":
             encoding = self.jsonheader["content-encoding"]
-            self.response = self._json_decode(data, encoding)
+            try:
+                self.response = self._json_decode(data, encoding)
+            except json.JSONDecodeError as e:
+                if(self.debug): print(f"JSONDecodeError: {e}")
+                self.close()
+                return
             if(self.debug): print("received response", repr(self.response), "from", self.addr)
             self._process_response_json_content()
         else:
@@ -212,6 +227,13 @@ class Message:
                 self.addr,
             )
             self._process_response_binary_content()
+        
+        self._reset_state()
              
-        # Close when response has been processed
-        self.close()
+    def _reset_state(self):
+        ''' Reset the message state for the next request '''
+        self._recv_buffer = b""
+        self._jsonheader_len = None
+        self.jsonheader = None
+        # self.request = None
+        self.response_created = False
