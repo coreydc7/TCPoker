@@ -29,9 +29,7 @@ parser.add_argument('-v', '--verbose', action='store_true', help='Show detailed 
 # Parse command-line args
 args = parser.parse_args()
     
-debug = False
-if(args.verbose):
-    debug = True
+debug = args.verbose
 host = args.ip
 port = args.port
 
