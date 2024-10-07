@@ -10,7 +10,7 @@ This is a simple Texas Hold'em game implemented over TCP using Python
         Required flags are: -i (IP address of server), -p (Listening port of server) \
         Optional flags are: [-h] (Displays help information), [-v] - Verbose outputs, displays useful information such as connection/disconnection events or data being sent and received. 
 3. **Play the game: (work in progress)** Server deals each player two hole cards at the start of the round. Players take turns betting each time a new community card is dealt face-up on the board. The goal is to make the best five-card poker hand using any combination of hole cards and community cards. Whoever has the best hand, wins the pot. \
-Currently, poker.py contains all the logic for the texas hold'em game itself (which is fully functional offline). Clients are only able to communicate with the server via a very simple messaging protocol, which can be used to send commands such as 'join'/'status'/'ready'/'exit' and process their responses. Client connections are persistent, and they can exchange any number of commands before disconnecting with the 'exit' command. 
+Currently, poker.py contains all the logic for the texas hold'em game itself (which is fully functional offline). Clients are able to communicate with the server via a very simple messaging protocol, which can be used to send commands such as 'join'/'status'/'ready'/'exit' and process their responses. Client connections are persistent, and they can exchange any number of commands before disconnecting with the 'exit' command. 
 
 **Technologies used:**
 * Python
