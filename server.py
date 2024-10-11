@@ -52,6 +52,9 @@ try:
                 message = key.data
                 try:
                     message.process_events(mask)    # Main entry point, will be called repeatedly (Use state variables for things that should only be called once)
+                except libserver.ClientDisconnectException:
+                    # Handles client disconnections
+                    print(f"Connection closed by {message.addr}.")
                 except Exception:
                     print(
                         "main: error: exception for",

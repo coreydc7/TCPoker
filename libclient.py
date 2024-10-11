@@ -23,6 +23,9 @@ class Message:
         
     def _set_selector_events_mask(self, mode):
         """Set selector to listen for events: mode is 'r', 'w', or 'rw'."""
+        if self.sock is None:
+            return # Socket is closed
+        
         if mode == "r":
             events = selectors.EVENT_READ
         elif mode == "w":
@@ -93,8 +96,10 @@ class Message:
         if "connect" in content:
             print(f"{content.get('connect')} \n {content.get('players')}")
         if "result" in content:
-            print(content.get("result"))     
-            
+            print(content.get("result"))    
+        if "disconnect" in content:
+            print("Disconnected from host")
+            self.close()           
         
 
     def _process_response_binary_content(self):
@@ -107,11 +112,15 @@ class Message:
             print(f'{action.decode("utf-8")}: {value}')
             
     def process_events(self, mask):
-        if mask & selectors.EVENT_READ:
-            self.read()
-        if mask & selectors.EVENT_WRITE:
-            self.write()
-            
+        ''' Main entry point and handler '''
+        try:
+            if mask & selectors.EVENT_READ:
+                self.read()
+            if mask & selectors.EVENT_WRITE:
+                self.write()
+        except Exception as e:
+            print(f"Error processing events: {e}")
+            self.close()
     def read(self):
         self._read()
 
