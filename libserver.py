@@ -12,7 +12,7 @@ class Message:
     ''' Handles multiple messages per connection by resetting state after each response.
         Resets state after a _write(), and after creating a response'''
     
-    def __init__(self, selector, sock, addr, debug):
+    def __init__(self, selector, sock, addr, game_state, debug):
         self.selector = selector
         self.sock = sock
         self.addr = addr
@@ -22,8 +22,8 @@ class Message:
         self.jsonheader = None
         self.request = None
         self.response_created = False
-        self.numPlayers = 0
         self.debug = debug
+        self.game_state = game_state
         
     def _set_selector_events_mask(self, mode):
         ''' Set selector to listen for events: mode is 'r', 'w', or 'rw'. '''
@@ -58,6 +58,7 @@ class Message:
                 raise ClientDisconnectException("Client Disconnected.")
             
     def _write(self):
+        ''' Writes contents of send_buffer '''
         if self._send_buffer:
             if(self.debug): print("sending", repr(self._send_buffer), "to", self.addr)
             try:
@@ -107,21 +108,18 @@ class Message:
         action = self.request.get("action")
         
         if action == "join":
-            if (self.numPlayers < 9):
-                self.numPlayers += 1
-                content = {"connect": "Welcome to TCPoker!","players": f'There are {self.numPlayers} player(s) connected.'}
+            if (len(self.game_state.connected_clients) < self.game_state.game.num_players):
+                self.game_state.connected_clients.append(self)
+                content = {"connect": "Welcome to TCPoker!","players": f'You are Player #{self.game_state.connected_clients.index(self) + 1}\nThere are {len(self.game_state.connected_clients)}/{self.game_state.game.num_players} player(s) connected.'}
             else:
-                content = {"connect": 'Error: too many players already at table.',"players": f'There are currently {self.numPlayers} players connected.'}
+                content = {"result": 'Unable to join the table, there are to many players already at table.',"players": f'There are currently {len(self.game_state.connected_clients)} players connected.'}
         
         elif action == "status":
             content = {"result": 'TODO: Display all players and their ready status'}
         
         elif action == "ready":
-            content = {"result": 'TODO: Mark the current player as ready.'}
-        
-        elif action == "exit":
-            content = {"disconnect": True}
-            self.close()
+            self.game_state.game.set_player_ready(self.game_state.connected_clients.index(self))
+            content = {"result": f'Marked Player {self.game_state.connected_clients.index(self) + 1} as ready.'}
         
         else:
             content = {"result": f"Unknown action: '{action}'."}
@@ -205,6 +203,11 @@ class Message:
     def close(self):
         print("closing connection to", self.addr)
         try:
+            self.game_state.connected_clients.remove(self)
+        except ValueError as e:     # Occurs when a client didn't fully join successfully
+            pass
+        
+        try:
             self.selector.unregister(self.sock)
         except Exception as e:
             print(
@@ -226,7 +229,7 @@ class Message:
     def process_protoheader(self):
         hdrlen = 2 # Hard-coded length. 2-byte integer in network (big-endian) byte order
         if len(self._recv_buffer) >= hdrlen:
-            ''' #struct.unpack is used to read the value, decode it, and store it in 
+            ''' struct.unpack is used to read the value, decode it, and store it in 
             self._jsonheader_len. Handles conversions such as endianness and 
             interprets bytes as packed binary data '''
             self._jsonheader_len = struct.unpack( 

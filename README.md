@@ -4,7 +4,7 @@ This is a simple Texas Hold'em game implemented over TCP using Python
 
 **How to play:**
 1. **Start the server:** Run the `server.py` script. \
-        Required flags are: -i (host IP), -p (Listening port) \
+        Required flags are: -i (host IP), -p (Listening port), -c (Number of players, supports 2-9 player games) \
         Optional flags are: [-h] (Displays help information), [-v] - Verbose outputs, displays useful information such as connection/disconnection events, socket changes, data sent and received, etc. 
 2. **Connect clients:** Run the `client.py` script on 2-9 different machines or terminals. \
         Required flags are: -i (IP address of server), -p (Listening port of server) \
