@@ -96,10 +96,7 @@ class Message:
         if "connect" in content:
             print(f"{content.get('connect')} \n {content.get('players')}")
         if "result" in content:
-            print(content.get("result"))    
-        if "disconnect" in content:
-            print("Disconnected from host")
-            self.close()           
+            print(content.get("result"))               
         
 
     def _process_response_binary_content(self):

@@ -98,6 +98,16 @@ class TexasHoldEm:
         self.dealer_position = 0
         self.small_blind = 0
         self.big_blind = 0
+        self.players_ready = [False] * num_players
+        
+    def set_player_ready(self, player_idx):
+        self.players_ready[player_idx] = True
+        
+    def all_players_ready(self):
+        return all(self.players_ready)
+    
+    def reset_player_readiness(self):
+        self.players_ready = [False] * self.num_players
         
     def create_deck(self) -> List[Card]:
         ''' Create and shuffle a standard 52-card deck '''
