@@ -49,8 +49,10 @@ port = args.port
 request = create_request('join')
 initialize_connection(host, port, request) # passes request into start_connection
 
+should_exit = False
+
 try: 
-    while True:
+    while not should_exit:
         events = sel.select(timeout=1) # repeatedly executes on the 'timeout' interval
         for key, mask in events:
             message = key.data
@@ -67,7 +69,9 @@ try:
                         message.request = request
                         message._request_queued = False
                         message.response = None
-                        if(user_input == 'exit'): break
+                        if(user_input == 'exit'): 
+                            should_exit = True
+                            break
                     else:
                         print(f"Invalid command. Try {valid_requests}.")
             except Exception:

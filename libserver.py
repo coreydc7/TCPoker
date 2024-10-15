@@ -4,6 +4,10 @@ import json
 import io
 import struct
 
+class ClientDisconnectException(Exception):
+    ''' Custom exception to handle expected client disconnects vs unexpected client disconnects '''
+    pass
+
 class Message:
     ''' Handles multiple messages per connection by resetting state after each response.
         Resets state after a _write(), and after creating a response'''
@@ -50,7 +54,8 @@ class Message:
             if data:
                 self._recv_buffer += data
             else:
-                raise RuntimeError("Peer closed.")
+                # No data to read means that peer disconnected
+                raise ClientDisconnectException("Client Disconnected.")
             
     def _write(self):
         if self._send_buffer:
@@ -115,9 +120,8 @@ class Message:
             content = {"result": 'TODO: Mark the current player as ready.'}
         
         elif action == "exit":
-            print(f"Disconnecting {self.addr}")
+            content = {"disconnect": True}
             self.close()
-            return None
         
         else:
             content = {"result": f"Unknown action: '{action}'."}
@@ -166,10 +170,18 @@ class Message:
     
     def process_events(self, mask):
         ''' Main entry point and handler '''
-        if mask & selectors.EVENT_READ:
-            self.read()
-        if mask & selectors.EVENT_WRITE:
-            self.write()
+        try:
+            if mask & selectors.EVENT_READ:
+                self.read()
+            if mask & selectors.EVENT_WRITE:
+                self.write()
+        except ClientDisconnectException:
+            # if theres no data to read, then read will raise a ClientDisconnectException. 
+            # Ensure we close the socket if client disconnects 
+            self.close()
+        except Exception as e:
+            print(f"Error processing events {e}")
+            self.close()
             
     def read(self):
         self._read()
