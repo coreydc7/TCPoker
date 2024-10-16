@@ -14,7 +14,16 @@ class GameState:
     def __init__(self, num_players):
         self.connected_clients = []
         self.game = TexasHoldEm(num_players)
-
+        
+    def broadcast_message(self, message):
+        ''' Broadcast a message to all clients connected '''
+        if len(self.connected_clients) >= 1:
+            message_fmt = self.connected_clients[0].create_message(message)
+        
+            for client in self.connected_clients:   # for each libserver Message (client), append to _send_buffer for _write() method, set to 'w' to trigger method
+                client._send_buffer += message_fmt
+                client._set_selector_events_mask('w')
+        
 def check_game_start():
     if len(game_state.connected_clients) >= 2 and game_state.game.all_players_ready():
         start_game()
@@ -33,7 +42,6 @@ def accept_wrapper(sock):
     for read events only. Once its been read, we'll modify it to listen for 
     write events only '''
     sel.register(conn, selectors.EVENT_READ, data=message) 
-    
         
 ''' Entry point into server.py '''
 parser = argparse.ArgumentParser(description="(help show the user how to run the server)")

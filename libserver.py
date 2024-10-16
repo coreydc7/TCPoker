@@ -132,39 +132,7 @@ class Message:
             "content_encoding": content_encoding,
         }
         return response
-            
-                
         
-    
-    def _create_response_binary_content(self):
-        ''' Example handling binary actions '''
-        # if(self.request[:6] == "negate" or "double"):   
-        #     action, value = struct.unpack(">6si", self.request)
-        #     action = action.decode("utf-8")
-        #     result = b"result"
-        #     result_num = 0
-            
-        #     if(action == "negate"):
-        #         result_num = value * -1
-        #     elif(action == "double"):
-        #         result_num = value * 2
-                
-        #     result_content = struct.pack(">6si", result, result_num)
-        #     response = {
-        #         "content_bytes": result_content,
-        #         "content_type": "binary/custom-server-binary-type",
-        #         "content_encoding": "binary",
-        #     }
-            
-        # else:
-        #     response = {
-        #         "content_bytes": b"First 10 bytes of request: "
-        #         + self.request[:10],
-        #         "content_type": "binary/custom-server-binary-type",
-        #         "content_encoding": "binary",
-        #     }
-        # return response
-        pass
     
     def process_events(self, mask):
         ''' Main entry point and handler '''
@@ -201,7 +169,10 @@ class Message:
         self._write()
         
     def close(self):
-        print("closing connection to", self.addr)
+        message = f"closing connection to {self.addr}"
+        print(message)
+        self.game_state.broadcast_message(message)
+        
         try:
             self.game_state.connected_clients.remove(self)
         except ValueError as e:     # Occurs when a client didn't fully join successfully
@@ -278,18 +249,25 @@ class Message:
         self._set_selector_events_mask("w")
         
     def create_response(self):
-        ''' Calls other methods to create a response, depending on the content-type '''
-        if self.jsonheader["content-type"] == "text/json":
-            response = self._create_response_json_content()
-        else:
-            # Binary or unknown content-type
-            response = self._create_response_binary_content()
-       
+        ''' Calls other methods to create a response for writing, and appends it to _send_buffer '''
+        response = self._create_response_json_content()
         message = self._create_message(**response)
         self._send_buffer += message
         self.response_created = True
             
-        self._reset_state()
+        # self._reset_state()
+        
+    def create_message(self, message):
+        ''' Creates a formatted message for writing, and appends it to _send_buffer '''
+        content = {"result": message} 
+        content_encoding = "utf-8"
+        content_bytes = self._json_encode(content, content_encoding)
+        response = {
+            "content_bytes": content_bytes,
+            "content_type": "text/json",
+            "content_encoding": content_encoding,
+        }
+        return self._create_message(**response)
             
     def _reset_state(self):
         ''' Reset the message state for the next request '''
@@ -297,4 +275,4 @@ class Message:
         self._jsonheader_len = None
         self.jsonheader = None
         self.request = None
-        self.response_created = False
+        self.response_created = False    
