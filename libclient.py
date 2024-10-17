@@ -215,24 +215,15 @@ class Message:
         data = self._recv_buffer[:content_len]
         self._recv_buffer = self._recv_buffer[content_len:]
         
-        if self.jsonheader["content-type"] == "text/json":
-            encoding = self.jsonheader["content-encoding"]
-            try:
-                self.response = self._json_decode(data, encoding)
-            except json.JSONDecodeError as e:
-                if(self.debug): print(f"JSONDecodeError: {e}")
-                self.close()
-                return
-            if(self.debug): print("received response", repr(self.response), "from", self.addr)
-            self._process_response_json_content()
-        else:
-            # Binary or unknown content-type
-            self.response = data
-            print(
-                f'received {self.jsonheader["content-type"]} response from',
-                self.addr,
-            )
-            self._process_response_binary_content()
+        encoding = self.jsonheader["content-encoding"]
+        try:
+            self.response = self._json_decode(data, encoding)
+        except json.JSONDecodeError as e:
+            if(self.debug): print(f"JSONDecodeError: {e}")
+            self.close()
+            return
+        if(self.debug): print("received response", repr(self.response), "from", self.addr)
+        self._process_response_json_content()
         
         self._reset_state()
              
