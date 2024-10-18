@@ -1,12 +1,10 @@
 import sys
 import socket
 import selectors
-import traceback
 import argparse
 import libclient
 import asyncio
 import aioconsole
-import errno
 
 sel = selectors.DefaultSelector()
 valid_requests = ['join','status', 'ready', 'exit']
@@ -46,16 +44,7 @@ def initialize_connection(host, port, request):
 async def handle_server_messages(message):
     global client_disconnect
     while not client_disconnect:
-        try:
-            events = sel.select(timeout=0)
-        except OSError as e:  # TODO:This may work for windows only?
-            if e.errno == errno.EINVAL:
-                break      
-            if e.winerror == 10022:     
-                # Socket has been closed, exit message handler
-                break
-            else:
-                raise
+        events = sel.select(timeout=0)
         for key, mask in events:
             try:
                 message.process_events(mask)
