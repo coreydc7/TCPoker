@@ -1,4 +1,3 @@
-import sys
 import socket
 import selectors
 import traceback
@@ -30,7 +29,7 @@ def check_game_start():
         
 def start_game():
     print("Starting Texas Hold'em!")
-    #game_state.game.play_hand()?
+    #game_state.game.play_hand()
 
 def accept_wrapper(sock):
     conn, addr = sock.accept()  # Should be ready to read

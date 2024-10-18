@@ -4,9 +4,20 @@ import selectors
 import traceback
 import argparse
 import libclient
+import asyncio
+import aioconsole
 
 sel = selectors.DefaultSelector()
 valid_requests = ['join','status', 'ready', 'exit']
+
+async def get_user_input():
+    while True:
+        await asyncio.sleep(0.3)
+        user_input = await aioconsole.ainput(f"Enter command {valid_requests}: ")
+        if user_input in valid_requests:
+            return user_input
+        else:
+            print(f"Invalid command. Try {valid_requests}.")
 
 def create_request(action):
     if action in valid_requests:
@@ -28,63 +39,61 @@ def initialize_connection(host, port, request):
     events = selectors.EVENT_READ | selectors.EVENT_WRITE
     message = libclient.Message(sel, sock, addr, request, debug) # Create a 'Message' object using the request dictionary
     sel.register(sock, events, data=message)    # Register file object with selector
+    return message
 
-
-''' Entry point into client.py '''
-parser = argparse.ArgumentParser(description="(help show the player how to connect, and play)")
-
-# Supported command-line args
-parser.add_argument('-i', '--ip', type=str, required=True, help='IP Address of Server to connect to.')
-parser.add_argument('-p', '--port', type=int, required=True, help='Listening port of Server')
-parser.add_argument('-v', '--verbose', action='store_true', help='Show detailed output, such as connection and disconnection events.')
-
-# Parse command-line args
-args = parser.parse_args()
-
-debug = args.verbose
-host = args.ip
-port = args.port  
-
-# Sends initial join request
-request = create_request('join')
-initialize_connection(host, port, request) # passes request into start_connection
-
-should_exit = False
-
-try: 
-    while not should_exit:
-        events = sel.select(timeout=1) # repeatedly executes on the 'timeout' interval
+async def handle_server_messages(message):
+    while True:
+        events = sel.select(timeout=0)
         for key, mask in events:
-            message = key.data
             try:
                 message.process_events(mask)
-                ''' After process_events(), the client checks if there is currently a response. 
-                    If there is, then initial connection is complete, and it prompts for user-input for the next (request -> response)
-                    TODO: In the future, clients should only be prompted for input when it's their turn to make a move.
-                          Consider adding a field to all responses indicating if its time to communicate, by checking message.response.get("ready")'''
-                if message.response:    
-                    user_input = input(f"Enter command {valid_requests}:").strip()
-                    if user_input in valid_requests:
-                        request = create_request(user_input)
-                        message.request = request
-                        message._request_queued = False
-                        message.response = None
-                        if(user_input == 'exit'): 
-                            should_exit = True
-                            break
-                    else:
-                        print(f"Invalid command. Try {valid_requests}.")
-            except Exception:
-                print(
-                    "main: error: exception for",
-                    f"{message.addr}:\n{traceback.format_exc()}",
-                )
+                if message.response:
+                    # print(f"\nReceived from server: {message.response}")
+                    message.response = None
+            except Exception as e:
+                print(f"\nError: {e}")
                 message.close()
+                return
+        await asyncio.sleep(0.1)
+        
+    
+async def handle_client_input(message):
+    while True:
+        user_input = await get_user_input()
+        request = create_request(user_input)
+        message.request = request
+        message._request_queued = False
+        message._set_selector_events_mask('w')
+        if user_input == 'exit':
+            break
+                
+async def main():
+    parser = argparse.ArgumentParser(description="(help show the player how to connect, and play)")
 
-        # # Check for a socket being monitored to continue.
-        # if not sel.get_map():
-        #     break
-except KeyboardInterrupt:
-    print("caught keyboard interrupt, exiting")
-finally:
+    # Supported command-line args
+    parser.add_argument('-i', '--ip', type=str, required=True, help='IP Address of Server to connect to.')
+    parser.add_argument('-p', '--port', type=int, required=True, help='Listening port of Server')
+    parser.add_argument('-v', '--verbose', action='store_true', help='Show detailed output, such as connection and disconnection events.')
+
+    # Parse command-line args
+    args = parser.parse_args()
+
+    global debug 
+    debug = args.verbose
+    host = args.ip
+    port = args.port  
+
+    # Sends initial join request
+    request = create_request('join')
+    message = initialize_connection(host, port, request) # passes request into start_connection
+
+    server_task = asyncio.create_task(handle_server_messages(message))
+    await asyncio.sleep(0.1)
+    user_task = asyncio.create_task(handle_client_input(message))
+    
+    await asyncio.gather(server_task, user_task)
+    
     sel.close()
+    
+if __name__ == "__main__":
+    asyncio.run(main())
