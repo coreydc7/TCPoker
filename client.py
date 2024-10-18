@@ -6,6 +6,7 @@ import argparse
 import libclient
 import asyncio
 import aioconsole
+import errno
 
 sel = selectors.DefaultSelector()
 valid_requests = ['join','status', 'ready', 'exit']
@@ -43,7 +44,16 @@ def initialize_connection(host, port, request):
 
 async def handle_server_messages(message):
     while True:
-        events = sel.select(timeout=0)
+        try:
+            events = sel.select(timeout=0)
+        except OSError as e:  # TODO:This may work for windows only?
+            if e.errno == errno.EINVAL:
+                break      
+            if e.winerror == 10022:     
+                # Socket has been closed, exit message handler
+                break
+            else:
+                raise
         for key, mask in events:
             try:
                 message.process_events(mask)
@@ -66,6 +76,9 @@ async def handle_client_input(message):
         message._set_selector_events_mask('w')
         if user_input == 'exit':
             break
+    # When client disconnects, close connection and cleanup
+    message.close()
+    sel.close()
                 
 async def main():
     parser = argparse.ArgumentParser(description="(help show the player how to connect, and play)")

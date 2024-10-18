@@ -121,6 +121,9 @@ class Message:
             self.game_state.game.set_player_ready(self.game_state.connected_clients.index(self))
             content = {"result": f'Marked Player {self.game_state.connected_clients.index(self) + 1} as ready.'}
         
+        elif action == "exit":
+            content = {"result": "Goodbye!"}
+            self.close()
         else:
             content = {"result": f"Unknown action: '{action}'."}
                 
@@ -169,7 +172,7 @@ class Message:
         self._write()
         
     def close(self):
-        message = f"closing connection to {self.addr}"
+        message = f"Server has closed connection to {self.addr}"
         print(message)
         self.game_state.broadcast_message(message)
         

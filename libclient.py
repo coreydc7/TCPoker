@@ -92,10 +92,10 @@ class Message:
     
     def _process_response_json_content(self):
         content = self.response
-        
         if "connect" in content:
             print(f"{content.get('connect')} \n {content.get('players')}")
         if "result" in content:
+            print()     # New line
             print(content.get("result"))               
         
 
