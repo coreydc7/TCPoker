@@ -128,6 +128,7 @@ class TexasHoldEm:
             self.community_cards.append(self.deck.pop())
             
     def post_blinds(self):
+        ''' Posts blinds differently for 2 and >2 player games '''
         if self.num_players == 2:
             small_blind = self.dealer_position
             big_blind = (self.dealer_position + 1) % 2
@@ -136,7 +137,7 @@ class TexasHoldEm:
             print(f"Player {big_blind} is the big blind.")
             
             bets = [small_blind, big_blind]
-            self.ask_for_bets(bets)
+            self.ask_for_blinds(bets)
         else:
             small_blind = (self.dealer_position + 1) % self.num_players
             big_blind = (self.dealer_position + 2) % self.num_players
@@ -144,7 +145,8 @@ class TexasHoldEm:
             print(f"Player {small_blind} is the small blind")
             print(f"Player {big_blind} is the big blind")
             
-    def ask_for_bets(self, bets: List[int]):
+    def ask_for_blinds(self, bets: List[int]):
+        ''' Prompts for both blind bets '''
         small_blind = int(input(f"Player {bets[0]}, How much would you like to bet? (small blind) \n You have: {self.players[bets[0]].stack} \n"))
         big_blind = int(input(f"Player {bets[1]}, How much would you like to bet? It must be atleast 2x the small blind (${small_blind * 2}) (big blind) \n You have: {self.players[bets[1]].stack} \n"))
         while not (big_blind >= small_blind * 2):
@@ -161,7 +163,7 @@ class TexasHoldEm:
         
             
     def betting_round(self):
-        # ''' TODO: Implement betting logic when client connectivity is here '''
+        # ''' TODO: Implement betting round logic when client connectivity is here '''
         # for i in range(num_players):
         #     msg = int(input(f"Player {i}, how much would you like to bet?: $"))
         #     self.pot += msg
