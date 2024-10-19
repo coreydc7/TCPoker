@@ -4,16 +4,16 @@ import selectors
 import argparse
 import libclient
 import asyncio
-import aioconsole
+from prompt_toolkit import PromptSession
+from prompt_toolkit.patch_stdout import patch_stdout
 
 sel = selectors.DefaultSelector()
 valid_requests = ['join','status', 'ready', 'exit']
 client_disconnect = False
 
-async def get_user_input():
+async def get_user_input(session):
     while True:
-        await asyncio.sleep(0.3)
-        user_input = await aioconsole.ainput(f"Enter command {valid_requests}: ")
+        user_input = await session.prompt_async(f"Enter command {valid_requests}: ")
         if user_input in valid_requests:
             return user_input
         else:
@@ -49,7 +49,6 @@ async def handle_server_messages(message):
             try:
                 message.process_events(mask)
                 if message.response:
-                    # print(f"\nReceived from server: {message.response}")
                     message.response = None
             except Exception as e:
                 print(f"\nError: {e}")
@@ -58,10 +57,11 @@ async def handle_server_messages(message):
         await asyncio.sleep(0.1)
         
     
-async def handle_client_input(message):
+async def handle_client_input(message, session):
     global client_disconnect
     while not client_disconnect:
-        user_input = await get_user_input()
+        with patch_stdout():
+            user_input = await get_user_input(session)
         request = create_request(user_input)
         message.request = request
         message._request_queued = False
@@ -92,9 +92,12 @@ async def main():
     request = create_request('join')
     message = initialize_connection(host, port, request) # passes request into start_connection
 
+    # Initialize PromptSession, a basic command line UI
+    session = PromptSession()
+    
     server_task = asyncio.create_task(handle_server_messages(message))
     await asyncio.sleep(0.1)
-    user_task = asyncio.create_task(handle_client_input(message))
+    user_task = asyncio.create_task(handle_client_input(message, session))
     
     await asyncio.gather(server_task, user_task)
     
