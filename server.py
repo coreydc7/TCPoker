@@ -2,7 +2,7 @@ import socket
 import selectors
 import traceback
 import argparse
-from poker import TexasHoldEm
+from poker_offline import TexasHoldEm
 
 import libserver
 
@@ -14,14 +14,25 @@ class GameState:
         self.connected_clients = []
         self.game = TexasHoldEm(num_players)
         
-    def broadcast_message(self, message):
+    def broadcast_message(self, message, tag="result"):
         ''' Broadcast a message to all clients connected '''
         if len(self.connected_clients) >= 1:
-            message_fmt = self.connected_clients[0].create_message(message)
+            message_fmt = self.connected_clients[0].create_message(message, tag)
         
             for client in self.connected_clients:   # for each libserver Message (client), append to _send_buffer for _write() method, set to 'w' to trigger method
                 client._send_buffer += message_fmt
                 client._set_selector_events_mask('w')
+                
+    def broadcast_to_others(self, message, index, tag="result"):
+        ''' Broadcast a message to all other clients connected '''
+        if len(self.connected_clients) >= 1:
+            message_fmt = self.connected_clients[0].create_message(message, tag)
+            
+            for client in self.connected_clients:
+                if self.connected_clients.index(client) is not index:
+                    client._send_buffer += message_fmt
+                    client._set_selector_events_mask('w')
+                
         
 def check_game_start():
     if len(game_state.connected_clients) >= 2 and game_state.game.all_players_ready():
