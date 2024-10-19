@@ -1,5 +1,5 @@
 import unittest
-from poker import TexasHoldEm, Card, Suit, Rank, HandRank, Player
+from poker_offline import TexasHoldEm, Card, Suit, Rank, HandRank, Player
 
 class TestPoker(unittest.TestCase):
     def setUp(self) -> None:

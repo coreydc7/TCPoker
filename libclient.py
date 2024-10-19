@@ -52,7 +52,7 @@ class Message:
             
     def _write(self):
         if self._send_buffer:
-            if(self.debug): print("sending", repr(self._send_buffer), "to", self.addr)
+            if(self.debug): print("\nsending", repr(self._send_buffer), "to", self.addr)
             try:
                 # Should be ready to write
                 sent = self.sock.send(self._send_buffer)
@@ -95,18 +95,9 @@ class Message:
         if "connect" in content:
             print(f"{content.get('connect')} \n {content.get('players')}")
         if "result" in content:
-            print()     # New line
-            print(content.get("result"))               
-        
-
-    def _process_response_binary_content(self):
-        content = self.response
-        repr_content = repr(content)
-        print(f"got response: {repr_content}")
-        
-        if(repr_content[2:8] == "result"):
-            action, value = struct.unpack(">6si", content)
-            print(f'{action.decode("utf-8")}: {value}')
+            print(f'\n{content.get("result")}')           
+        if "debug" in content and self.debug:
+            print(f'\n{content.get("debug")}')    
             
     def process_events(self, mask):
         ''' Main entry point and handler '''
@@ -142,7 +133,7 @@ class Message:
             self._set_selector_events_mask("rw")
                 
     def close(self):
-        if(self.debug): print("closing connection to", self.addr)
+        if(self.debug): print("\nclosing connection to", self.addr)
         try:
             self.selector.unregister(self.sock)
         except Exception as e:
@@ -167,18 +158,11 @@ class Message:
         content = self.request["content"] 
         content_type = self.request["type"]
         content_encoding = self.request["encoding"]
-        if content_type == "text/json": # Create JSON message
-            req = {
-                "content_bytes": self._json_encode(content, content_encoding),
-                "content_type": content_type,
-                "content_encoding": content_encoding,
-            }
-        else: # Or binary
-            req = {
-                "content_bytes": content,
-                "content_type": content_type,
-                "content_encoding": content_encoding,
-            }
+        req = {
+            "content_bytes": self._json_encode(content, content_encoding),
+            "content_type": content_type,
+            "content_encoding": content_encoding,
+        }
         message = self._create_message(**req)
         self._send_buffer += message # Request message is appended to the send buffer, which is sent via _write()
         self._request_queued = True # Set state variable so queue_request() isnt called again by main while True
@@ -219,10 +203,10 @@ class Message:
         try:
             self.response = self._json_decode(data, encoding)
         except json.JSONDecodeError as e:
-            if(self.debug): print(f"JSONDecodeError: {e}")
+            if(self.debug): print(f"\nJSONDecodeError: {e}")
             self.close()
             return
-        if(self.debug): print("received response", repr(self.response), "from", self.addr)
+        if(self.debug): print("\nreceived response", repr(self.response), "from", self.addr)
         self._process_response_json_content()
         
         self._reset_state()

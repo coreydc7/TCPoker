@@ -110,6 +110,7 @@ class Message:
         if action == "join":
             if (len(self.game_state.connected_clients) < self.game_state.game.num_players):
                 self.game_state.connected_clients.append(self)
+                self.game_state.broadcast_to_others(f'{self.addr} has joined the table', self.game_state.connected_clients.index(self),tag='debug')
                 content = {"connect": "Welcome to TCPoker!","players": f'You are Player #{self.game_state.connected_clients.index(self) + 1}\nThere are {len(self.game_state.connected_clients)}/{self.game_state.game.num_players} player(s) connected.'}
             else:
                 content = {"result": 'Unable to join the table, there are to many players already at table.',"players": f'There are currently {len(self.game_state.connected_clients)} players connected.'}
@@ -120,10 +121,7 @@ class Message:
         elif action == "ready":
             self.game_state.game.set_player_ready(self.game_state.connected_clients.index(self))
             content = {"result": f'Marked Player {self.game_state.connected_clients.index(self) + 1} as ready.'}
-        
-        elif action == "exit":
-            content = {"result": "Goodbye!"}
-            self.close()
+
         else:
             content = {"result": f"Unknown action: '{action}'."}
                 
@@ -174,7 +172,7 @@ class Message:
     def close(self):
         message = f"Server has closed connection to {self.addr}"
         print(message)
-        self.game_state.broadcast_message(message)
+        self.game_state.broadcast_message(f'{self.addr} has left the table.', tag="debug")
         
         try:
             self.game_state.connected_clients.remove(self)
@@ -260,9 +258,9 @@ class Message:
             
         # self._reset_state()
         
-    def create_message(self, message):
+    def create_message(self, message, tag="result"):
         ''' Creates a formatted message for writing, and appends it to _send_buffer '''
-        content = {"result": message} 
+        content = {tag: message} 
         content_encoding = "utf-8"
         content_bytes = self._json_encode(content, content_encoding)
         response = {
