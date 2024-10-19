@@ -1,6 +1,6 @@
 import asyncio
 import socket
-from poker import TexasHoldEm
+from poker_offline import TexasHoldEm
 import libserver
 import argparse
 
