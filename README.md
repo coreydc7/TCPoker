@@ -81,7 +81,7 @@ The game flow has been outlined under "Play the game", and the internal protocol
 * Invalid commands from clients that would raise errors could be prevented on the client-side, or through an error message sent by the server. ```{
                 "action": "error",
                 "code": 400,
-                "message": "Invalid action. Please choose from {check, call, raise, fold}
+                "message": "Invalid action. Please choose from {check, call, raise, fold}"
         }```
                         
         
