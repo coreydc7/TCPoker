@@ -1,5 +1,5 @@
 .venv/
 __pycache__/
 old/
-./client.log
-./server.log
+client.log
+server.log
