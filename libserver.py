@@ -125,7 +125,12 @@ class Message:
                 content = {"result": 'Unable to join the table, there are to many players already at table.',"players": f'There are currently {len(self.game_state.connected_clients)} players connected.'}
         
         elif action == "status":
-            content = {"result": 'TODO: Display all players and their ready status'}
+            result = ''
+            for client in self.game_state.connected_clients:
+                player_idx = self.game_state.connected_clients.index(client)
+                is_ready = 'ready' if self.game_state.game.check_player_ready(player_idx) else 'not ready'
+                result += f'Player {player_idx} is {is_ready}\n'
+            content = {"result": result}
         
         elif action == "ready":
             self.game_state.game.set_player_ready(self.game_state.connected_clients.index(self))

@@ -100,6 +100,9 @@ class TexasHoldEm:
         self.big_blind = 0
         self.players_ready = [False] * num_players
         
+    def check_player_ready(self, player_idx):
+        return self.players_ready[player_idx]
+        
     def set_player_ready(self, player_idx):
         self.players_ready[player_idx] = True
         
