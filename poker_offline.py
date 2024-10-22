@@ -179,6 +179,7 @@ class TexasHoldEm:
         
         self.show_player_hands()   # TODO: Delete this when client functionality implemented
 
+        self.betting_round()
         print("Pre-flop completed") 
         print(f"Current pot is: ${self.pot}")
         

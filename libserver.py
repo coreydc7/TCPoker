@@ -108,7 +108,9 @@ class Message:
         action = self.request.get("action")
         
         if action == "join":
-            if (len(self.game_state.connected_clients) < self.game_state.game.num_players):
+            if self in self.game_state.connected_clients:
+                content = {"result": "Already joined table"}
+            elif (len(self.game_state.connected_clients) < self.game_state.game.num_players):
                 self.game_state.connected_clients.append(self)
                 self.game_state.broadcast_to_others(f'{self.addr} has joined the table', self.game_state.connected_clients.index(self),tag='debug')
                 content = {"connect": "Welcome to TCPoker!","players": f'You are Player #{self.game_state.connected_clients.index(self) + 1}\nThere are {len(self.game_state.connected_clients)}/{self.game_state.game.num_players} player(s) connected.'}
