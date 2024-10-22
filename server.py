@@ -3,8 +3,14 @@ import selectors
 import traceback
 import argparse
 from poker_offline import TexasHoldEm
-
+import logging
 import libserver
+
+logging.basicConfig(
+    filename='server.log',
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
 
 sel = selectors.DefaultSelector()
 
@@ -45,6 +51,7 @@ def start_game():
 def accept_wrapper(sock):
     conn, addr = sock.accept()  # Should be ready to read
     print("accepted connection from", addr)
+    logging.info(f"accepted connection from {addr}")
     conn.setblocking(False)
     # Pass game_state into each Message class
     message = libserver.Message(sel, conn, addr, game_state, debug)
@@ -79,6 +86,7 @@ lsock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 lsock.bind((host, port))
 lsock.listen()
 print("listening on", (host, port))
+logging.info(f"listening on {(host, port)}")
 lsock.setblocking(False)
 sel.register(lsock, selectors.EVENT_READ, data=None)
 
@@ -93,16 +101,15 @@ try:
                 try:
                     message.process_events(mask)    # Main entry point, will be called repeatedly (Use state variables for things that should only be called once)
                     check_game_start()  # Check if the game should start after each event
-                except libserver.ClientDisconnectException:
-                    # Handles client disconnections
-                    print(f"Connection closed by {message.addr}.")
-                except Exception:
+                except Exception as e:
                     print(
                         "main: error: exception for",
                         f"{message.addr}:\n{traceback.format_exc()}",
                     )
+                    logging.info(f"Error while processing events: {e}")
                     message.close() # Makes sure that socket is closed upon an exception, also removes the socket from being monitored by select()
 except KeyboardInterrupt:
     print("caught keyboard interrupt, exiting")
+    logging.info("shutting down server...")
 finally:
     sel.close()

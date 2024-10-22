@@ -6,6 +6,13 @@ import libclient
 import asyncio
 from prompt_toolkit import PromptSession
 from prompt_toolkit.patch_stdout import patch_stdout
+import logging
+
+logging.basicConfig(
+    filename='client.log',
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
 
 sel = selectors.DefaultSelector()
 all_valid_requests = ['join', 'status', 'ready', 'exit']
@@ -33,14 +40,25 @@ def create_request(action):
         
 def initialize_connection(host, port, request):
     addr = (host, port)
-    if(debug): print("starting connection to", addr)
+    if(debug): 
+        print("starting connection to", addr)
+        logging.info(f'attempting connection to {addr}')
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM) # Creates a socket for server connection
     sock.setblocking(False)
-    sock.connect_ex(addr)
-    events = selectors.EVENT_READ | selectors.EVENT_WRITE
-    message = libclient.Message(sel, sock, addr, request, debug) # Create a 'Message' object using the request dictionary
-    sel.register(sock, events, data=message)    # Register file object with selector
-    return message
+    try:
+        sock.connect_ex(addr)
+        events = selectors.EVENT_READ | selectors.EVENT_WRITE
+        message = libclient.Message(sel, sock, addr, request, debug) # Create a 'Message' object using the request dictionary
+        sel.register(sock, events, data=message)    # Register file object with selector
+        logging.info(f'successfully initialized connected to {addr}')
+        return message
+    except socket.error as e:
+        print(f"Socket error occurred: {e}")
+        logging.info(f"Socket error occurred: {e}")
+    except Exception as e:
+        print(f"An unexpected error occurred: {e}")
+        logging.info((f"An unexpected error occurred: {e}"))
+    
 
 async def handle_server_messages(message):
     global client_disconnect
@@ -53,6 +71,7 @@ async def handle_server_messages(message):
                     message.response = None
             except Exception as e:
                 print(f"\nError: {e}")
+                logging.error(f'Error processing server message: {e}')
                 message.close()
                 return
         await asyncio.sleep(0.1)
@@ -102,6 +121,7 @@ async def main():
     
     await asyncio.gather(server_task, user_task)
     
+    logging.info(f"Client disconnecting from {(host, port)}")
     sel.close()
     
 if __name__ == "__main__":

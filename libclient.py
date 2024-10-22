@@ -3,6 +3,13 @@ import selectors
 import json
 import io
 import struct
+import logging
+
+logging.basicConfig(
+    filename='client.log',
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
 
 class Message:
     ''' Handles multiple messages per connection by resetting state after each response.
