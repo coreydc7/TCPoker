@@ -8,26 +8,27 @@ from prompt_toolkit import PromptSession
 from prompt_toolkit.patch_stdout import patch_stdout
 
 sel = selectors.DefaultSelector()
-valid_requests = ['join','status', 'ready', 'exit']
+all_valid_requests = ['join', 'status', 'ready', 'exit']
+valid_requests = ['status', 'ready', 'exit']
 client_disconnect = False
 
 async def get_user_input(session):
     while True:
-        user_input = await session.prompt_async(f"Enter command {valid_requests}: ")
+        user_input = await session.prompt_async(f"Enter a command {valid_requests}: ")
         if user_input in valid_requests:
             return user_input
         else:
             print(f"Invalid command. Try {valid_requests}.")
 
 def create_request(action):
-    if action in valid_requests:
+    if action in all_valid_requests:
         return dict(
             type="text/json",
             encoding="utf-8",
             content=dict(action=action)
         )
     else:
-        print(f"Unrecognized command. Currently supported commands include: {valid_requests}")
+        print(f"Unrecognized command. Currently supported commands include: {all_valid_requests}")
         sys.exit(1)
         
 def initialize_connection(host, port, request):
