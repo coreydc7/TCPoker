@@ -3,6 +3,13 @@ import selectors
 import json
 import io
 import struct
+import logging
+
+logging.basicConfig(
+    filename='server.log',
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
 
 class ClientDisconnectException(Exception):
     ''' Custom exception to handle expected client disconnects vs unexpected client disconnects '''
@@ -174,6 +181,7 @@ class Message:
     def close(self):
         message = f"Server has closed connection to {self.addr}"
         print(message)
+        logging.info(message)
         self.game_state.broadcast_message(f'{self.addr} has left the table.', tag="debug")
         
         try:
