@@ -1,0 +1,127 @@
+import random
+from enum import Enum, IntEnum
+from dataclasses import dataclass, field
+from typing import List, Tuple
+from collections import Counter
+from itertools import combinations
+from functools import total_ordering
+
+class Suit(Enum):
+    SPADES = "♠"
+    HEARTS = "♥"
+    DIAMONDS = "♦"
+    CLUBS = "♣"
+    
+class Rank(IntEnum):
+    TWO = 2
+    THREE = 3
+    FOUR = 4
+    FIVE = 5
+    SIX = 6
+    SEVEN = 7
+    EIGHT = 8
+    NINE = 9
+    TEN = 10
+    J = 11
+    Q = 12
+    K = 13
+    A = 14
+    
+class HandRank(IntEnum):
+    HIGH_CARD = 1
+    PAIR = 2
+    TWO_PAIR = 3
+    THREE_OF_A_KIND = 4
+    STRAIGHT = 5
+    FLUSH = 6
+    FULL_HOUSE = 7
+    FOUR_OF_A_KIND = 8
+    STRAIGHT_FLUSH = 9
+    ROYAL_FLUSH = 10
+    
+@total_ordering # This automatically generates the remaining comparison methods based on __eq__ and __lt__
+@dataclass
+class Card:
+    suit: Suit
+    rank: Rank
+
+    def __str__(self) -> str:
+        return f"{self.rank.value}{self.suit.value}"
+    
+    # Comparisons operators
+    def __eq__(self, other):
+        if not isinstance(other, Card):
+            return NotImplemented
+        return (self.rank) == (other.rank)
+    
+    def __lt__(self, other):
+        if not isinstance(other, Card):
+            return NotImplemented
+        return (self.rank.value) < (other.rank.value)
+   
+@dataclass 
+class Player:
+    stack: int
+    hand: List[Card] = field(default_factory=list)
+    
+    def add_card(self, card: Card):
+        self.hand.append(card)
+        
+    def clear_cards(self):
+        self.hand.clear()
+        
+    def bet(self, amount: int):
+        if amount > self.stack:
+            raise ValueError("Not enough chips to bet")
+        self.stack -= amount
+        return amount
+    
+    def win(self, amount: int):
+        self.stack += amount
+        
+    def __str__(self) -> str:
+        return f"Stack: ${self.stack}, hand: {', '.join(str(card) for card in self.hand)}"
+        
+'''The entire gamestate is stored using this class '''
+class TexasHoldEm:
+    def __init__(self, num_players, starting_stack=100, seed=None):
+        self.num_players = num_players
+        self.random = random.Random(seed)
+        self.deck = self.create_deck()
+        self.community_cards = []
+        self.players = [Player(starting_stack) for _ in range(num_players)]
+        self.pot = 0
+        self.dealer_position = 0
+        self.small_blind = 0
+        self.big_blind = 0
+
+    def create_deck(self) -> List[Card]:
+        ''' Create and shuffle a standard 52-card deck '''
+        deck = [Card(suit, rank) for suit in Suit for rank in Rank]
+        self.random.shuffle(deck)
+        return deck
+    
+    def deal_hole_cards(self):
+        ''' Deal 2 hole cards to each player '''
+        for _ in range(2):
+            for player in self.players:
+                player.add_card(self.deck.pop())
+                
+    def print_cards(self, hand: List[Card]):
+        ''' Prints any cards passed to it. Useful for showing the community cards '''
+        rows = ['','','','','']
+        for card in hand:
+            if (card.rank.value > 10):  # Display A, J, Q, K instead of value
+                x = card.rank.name
+            else:
+                x = card.rank.value
+            rows[0] += ' ___  '  # Top line of the card
+            rows[1] += '|{} | '.format(str(x).ljust(2))
+            rows[2] += '| {} | '.format(str(card.suit.value))
+            rows[3] += '|_{}| '.format(str(x).rjust(2, '_'))
+        
+        card = ''
+        for row in rows:
+            card += row
+        rows.clear()
+        return card
