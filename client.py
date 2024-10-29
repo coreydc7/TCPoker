@@ -3,10 +3,15 @@ import argparse
 import sys
 import logging
 import asyncio
+import json
 from prompt_toolkit import PromptSession
 from prompt_toolkit.patch_stdout import patch_stdout
 
+game_active = False
+my_turn = False
+
 def setup_logging():
+    ''' Configure logging '''
     logging.basicConfig(
         filename='client.log',
         level=logging.INFO,
@@ -14,6 +19,8 @@ def setup_logging():
     )
 
 async def receive_messages(sock):
+    ''' Asynchronous task that handles receiving messages '''
+    global game_active
     loop = asyncio.get_event_loop()
     while True:
         try:
@@ -21,8 +28,13 @@ async def receive_messages(sock):
             if not data:
                 print("\nDisconnected from server.")
                 return
-            print(f"\nServer: {data.decode('utf-8')}")
-            sys.stdout.flush()
+            message = json.loads(data.decode('utf-8'))
+            logging.info(f"Received message from server: {message}")
+            if "broadcast" in message:
+                print(message["broadcast"])
+            elif "game_start" in message:
+                game_active = True
+                print(message["game_start"])
         except ConnectionResetError:
             print("\nConnection closed by server.")
             return
@@ -40,21 +52,22 @@ async def get_user_input(session, valid_commands):
         return 'exit'
 
 async def send_messages(sock, session):
+    ''' Asynchronous task to handle sending messages ''' 
     loop = asyncio.get_event_loop()
     valid_commands = ['ready', 'status', 'exit']
     
     while True:
         try:
             command = await get_user_input(session, valid_commands)
-            
+            message = json.dumps({"command": command})
             if command == 'exit':
-                await loop.sock_sendall(sock, command.encode('utf-8'))
+                await loop.sock_sendall(sock, message.encode('utf-8'))
                 print("Exiting...")
                 return
                 
             if command in valid_commands:
-                await loop.sock_sendall(sock, command.encode('utf-8'))
-                logging.info(f"Sent command: {command}")
+                await loop.sock_sendall(sock, message.encode('utf-8'))
+                logging.info(f"Sent message: {message}")
             else:
                 print(f"Invalid command. Valid commands are: {valid_commands}")
                 
