@@ -148,6 +148,9 @@ class TexasHoldEm:
             print(f"Player {small_blind} is the small blind")
             print(f"Player {big_blind} is the big blind")
             
+            bets = [small_blind, big_blind]
+            self.ask_for_blinds(bets)
+            
     def ask_for_blinds(self, bets: List[int]):
         ''' Prompts for both blind bets '''
         small_blind = int(input(f"Player {bets[0]}, How much would you like to bet? (small blind) \n You have: {self.players[bets[0]].stack} \n"))

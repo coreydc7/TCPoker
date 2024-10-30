@@ -20,21 +20,44 @@ def setup_logging():
 
 async def receive_messages(sock):
     ''' Asynchronous task that handles receiving messages '''
-    global game_active
+    global game_active, my_turn
     loop = asyncio.get_event_loop()
+    buffer = ""
+    
     while True:
         try:
             data = await loop.sock_recv(sock, 4096)
             if not data:
                 print("\nDisconnected from server.")
                 return
-            message = json.loads(data.decode('utf-8'))
-            logging.info(f"Received message from server: {message}")
-            if "broadcast" in message:
-                print(message["broadcast"])
-            elif "game_start" in message:
-                game_active = True
-                print(message["game_start"])
+            
+            buffer += data.decode('utf-8')
+            messages = buffer.split("\n")
+            buffer = messages.pop()     # Currently, incomplete messages stay in buffer
+            
+            for msg in messages:
+                if not msg:  # Skip empty messages
+                    continue
+                
+                try:
+                    message = json.loads(msg)
+                    logging.info(f"Received message from server: {message}")
+            
+                    if "error" in message:
+                        print(f"Error: {message['error']}")
+                        continue
+                    elif "broadcast" in message:
+                        print(message["broadcast"])
+                    elif "game_start" in message:
+                        game_active = True
+                        print(message["game_start"])
+                    elif "your_turn" in message:
+                        my_turn = True
+                        print("It is now your turn!")
+                except json.JSONDecodeError:
+                    logging.error(f"Invalid JSON received: {msg}")
+                    print(f"Invalid JSON received: {msg}")
+                        
         except ConnectionResetError:
             print("\nConnection closed by server.")
             return
@@ -44,6 +67,7 @@ async def receive_messages(sock):
 
 
 async def get_user_input(session, valid_commands):
+    ''' Asynchronous console input gathering '''
     try:
         with patch_stdout():
             user_input = await session.prompt_async(f"Enter a command {valid_commands}: ")
@@ -52,25 +76,38 @@ async def get_user_input(session, valid_commands):
         return 'exit'
 
 async def send_messages(sock, session):
-    ''' Asynchronous task to handle sending messages ''' 
+    ''' Asynchronously handles sending messages to the server, depening on if game_active and if my_turn '''
+    global game_active, my_turn
     loop = asyncio.get_event_loop()
-    valid_commands = ['ready', 'status', 'exit']
     
     while True:
         try:
-            command = await get_user_input(session, valid_commands)
-            message = json.dumps({"command": command})
-            if command == 'exit':
-                await loop.sock_sendall(sock, message.encode('utf-8'))
-                print("Exiting...")
-                return
-                
-            if command in valid_commands:
-                await loop.sock_sendall(sock, message.encode('utf-8'))
-                logging.info(f"Sent message: {message}")
+            if game_active:
+                # Game phase, only prompt when its clients turn
+                if my_turn:
+                    valid_game_commands = ['check', 'bet', 'fold', 'raise', 'exit']
+                    command = await get_user_input(session, valid_game_commands)
+                    message = json.dumps({"command": command})
+                    await loop.sock_sendall(sock, message.encode('utf-8'))
+                    logging.info(f"Sent game command: {message}")
+                    my_turn = False
+                else:
+                    await asyncio.sleep(0.1)
             else:
-                print(f"Invalid command. Valid commands are: {valid_commands}")
+                # Lobby phase, continuously prompt for input
+                valid_lobby_commands = ['ready', 'status', 'exit']
+                command = await get_user_input(session, valid_lobby_commands)
+                message = json.dumps({"command": command})
                 
+                if command == 'exit':
+                    await loop.sock_sendall(sock, message.encode('utf-8'))
+                    print("Exiting...")
+                    return
+                elif command in valid_lobby_commands:
+                    await loop.sock_sendall(sock, message.encode('utf-8'))
+                    logging.info(f"Sent message: {message}")
+                else:
+                    print(f"Invalid command. Valid commands are: {valid_lobby_commands}")
         except Exception as e:
             logging.error(f"Failed to send command: {e}")
             print(f"Error sending command: {e}")
@@ -80,13 +117,14 @@ async def main():
     parser = argparse.ArgumentParser(description="TCPoker Client")
     parser.add_argument('-i', '--ip', type=str, required=True, help='Server IP Address.')
     parser.add_argument('-p', '--port', type=int, required=True, help='Server Port.')
-    parser.add_argument('-v', '--verbose', action='store_true', help='Enable debug logging.')
     args = parser.parse_args()
     
     setup_logging()
     server_address = (args.ip, args.port)
     
     sock = None
+    tasks = []
+    
     try:
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.connect_ex(server_address)
@@ -97,9 +135,10 @@ async def main():
         
         receive_task = asyncio.create_task(receive_messages(sock))
         send_task = asyncio.create_task(send_messages(sock, session))
+        tasks = [receive_task, send_task]
         
         done, pending = await asyncio.wait(
-            [receive_task, send_task],
+            tasks,
             return_when=asyncio.FIRST_COMPLETED
         )
         
@@ -112,6 +151,10 @@ async def main():
         logging.error(f"Error in main loop {e}.")
         print(f"Error in main loop {e}.")
     finally:
+        # Cleanup after a client disconnects
+        for task in tasks:
+            if not task.done():
+                task.cancel()
         if sock:
             sock.close()
             logging.info(f"Client disconnecting from {server_address}.")
