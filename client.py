@@ -67,6 +67,7 @@ async def receive_messages(sock):
 
 
 async def get_user_input(session, valid_commands):
+    ''' Asynchronous console input gathering '''
     try:
         with patch_stdout():
             user_input = await session.prompt_async(f"Enter a command {valid_commands}: ")
@@ -75,6 +76,7 @@ async def get_user_input(session, valid_commands):
         return 'exit'
 
 async def send_messages(sock, session):
+    ''' Asynchronously handles sending messages to the server, depening on if game_active and if my_turn '''
     global game_active, my_turn
     loop = asyncio.get_event_loop()
     
@@ -110,43 +112,6 @@ async def send_messages(sock, session):
             logging.error(f"Failed to send command: {e}")
             print(f"Error sending command: {e}")
             return
-# async def send_messages(sock, session):
-#     ''' Asynchronous task to handle sending messages ''' 
-#     global game_active, my_turn
-#     loop = asyncio.get_event_loop()
-    
-#     while True:
-#         try:
-#             if not game_active:
-#                 # Lobby phase, continuously prompt for commands
-#                 command = await get_user_input(session, valid_lobby_commands)
-#                 message = json.dumps({"command": command})
-                
-#                 if command == 'exit':
-#                     await loop.sock_sendall(sock, message.encode('utf-8'))
-#                     print("Exiting...")
-#                     return
-                
-#                 elif command in valid_lobby_commands:
-#                     await loop.sock_sendall(sock, message.encode('utf-8'))
-#                     logging.info(f"Sent message: {message}")
-                    
-#                 else:
-#                     print(f"Invalid command. Valid commands are: {valid_lobby_commands}")
-#             else:
-#                 # Game Phase, only prompt when clients turn
-#                 if my_turn:
-#                     command = await get_user_input(session, valid_game_commands)
-#                     message = json.dumps({"command": command})
-#                     await loop.sock_sendall(sock, message.encode('utf-8'))
-#                     logging.info(f"Sent game command: {message}")
-#                     my_turn = False
-#                 else:
-#                     await asyncio.sleep(0.1)
-#         except Exception as e:
-#             logging.error(f"Failed to send command: {e}")
-#             print(f"Error sending command: {e}")
-#             return
 
 async def main():
     parser = argparse.ArgumentParser(description="TCPoker Client")
@@ -186,6 +151,7 @@ async def main():
         logging.error(f"Error in main loop {e}.")
         print(f"Error in main loop {e}.")
     finally:
+        # Cleanup after a client disconnects
         for task in tasks:
             if not task.done():
                 task.cancel()

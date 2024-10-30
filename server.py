@@ -91,7 +91,7 @@ class GameState:
         ''' Notifies the current player it's their turn '''
         writer, addr = self.connected_clients[current_player]
         try:
-            message = json.dumps({"your_turn": True}) + '\n'
+            message = json.dumps({"your_turn": True}) + "\n"
             writer.write(message.encode('utf-8'))
             await writer.drain()
             logging.info(f"Notified player {current_player + 1} it's their turn.")
