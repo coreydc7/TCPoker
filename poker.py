@@ -5,6 +5,7 @@ from typing import List, Tuple
 from collections import Counter
 from itertools import combinations
 from functools import total_ordering
+import asyncio
 
 class Suit(Enum):
     SPADES = "♠"
@@ -84,7 +85,7 @@ class Player:
         
 '''The entire gamestate is stored using this class '''
 class TexasHoldEm:
-    def __init__(self, num_players, starting_stack=100, seed=None):
+    def __init__(self, num_players, GameState, starting_stack=100, seed=None):
         self.num_players = num_players
         self.random = random.Random(seed)
         self.deck = self.create_deck()
@@ -94,6 +95,13 @@ class TexasHoldEm:
         self.dealer_position = 0
         self.small_blind = 0
         self.big_blind = 0
+        self.GameState = GameState
+        
+    async def play_hand(self):
+        ''' Main game flow for every hand '''
+        self.deal_hole_cards()  # Pre-flop
+        
+        await self.post_blinds()  # Small and big blinds (forced bets)
 
     def create_deck(self) -> List[Card]:
         ''' Create and shuffle a standard 52-card deck '''
@@ -106,7 +114,31 @@ class TexasHoldEm:
         for _ in range(2):
             for player in self.players:
                 player.add_card(self.deck.pop())
-                
+    
+    async def post_blinds(self):
+        ''' Posts blinds differently for 2 and >2 player games '''
+        if self.num_players == 2:
+            small_blind = self.dealer_position
+            big_blind = (self.dealer_position + 1) % 2
+            
+            await self.GameState.broadcast("broadcast", f"Player {small_blind} is the small blind, and Player {big_blind} is the big blind.")
+            await asyncio.sleep(0.1)
+            bets = [small_blind, big_blind]
+            await self.ask_for_blinds(bets)
+        else:
+            small_blind = (self.dealer_position + 1) % self.num_players
+            big_blind = (self.dealer_position + 2) % self.num_players
+            
+            await self.GameState.broadcast("broadcast", f"Player {small_blind} is the small blind, and Player {big_blind} is the big blind.")
+            await asyncio.sleep(0.1)
+            bets = [small_blind, big_blind]
+            await self.ask_for_blinds(bets)
+            
+    async def ask_for_blinds(self, bets: List[int]):
+        ''' Prompts for both blinds bets '''
+        await self.GameState.notify_turn(0)
+            
+    
     def print_cards(self, hand: List[Card]):
         ''' Prints any cards passed to it. Useful for showing the community cards '''
         rows = ['','','','','']
@@ -125,3 +157,27 @@ class TexasHoldEm:
             card += row
         rows.clear()
         return card
+    
+    def reset_game(self):
+        ''' Resets the game state 
+            Creates and shuffles a new deck
+            Resets community cards
+            Resets players hands
+            Resets pot amount
+            Moves dealer to next position'''
+        self.deck = self.create_deck()
+        self.community_cards = []
+        for player in self.players:
+            player.clear_cards()
+        self.pot = 0
+        self.move_dealer_position()
+        self.small_blind = 0
+        self.big_blind = 0
+        
+    def move_dealer_position(self):
+        '''Moves dealer incrementer to next position
+           Even though the server is handling all dealing, 
+           it is still important to keep track of the dealer 
+           to determine proper betting order'''
+        self.dealer_position = (self.dealer_position + 1) % self.num_players
+        
