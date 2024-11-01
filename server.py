@@ -120,7 +120,7 @@ async def handle_client(reader, writer, game_state):
             
             if command == 'status':
                 status_message = {
-                    "broadcast": [
+                    "status": [
                         f"Player {i} is {'ready' if ready else 'not ready'}"
                         for i, ready in enumerate(game_state.ready_status)
                     ]
