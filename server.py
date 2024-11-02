@@ -17,7 +17,7 @@ class GameState:
     def __init__(self, num_players):
         self.connected_clients = []
         self.num_players = num_players
-        self.ready_status = [False] * num_players
+        self.ready_status = []
         self.lock = asyncio.Lock()
         self.game = TexasHoldEm(num_players, self)
         self.game_active = False
@@ -27,7 +27,7 @@ class GameState:
         async with self.lock:
             if len(self.connected_clients) < self.num_players:
                 self.connected_clients.append((writer, address))
-                self.ready_status[len(self.connected_clients)-1] = False
+                self.ready_status.append((False, address))
                 print(f"{address} has connected to the game as Player {self.connected_clients.index((writer, address))}.")
                 await self.broadcast("broadcast", f"{address} has joined the game as Player {self.connected_clients.index((writer, address))}.")
                 logging.info(f"{address} joined the game.")
@@ -42,10 +42,10 @@ class GameState:
     async def remove_client(self, writer, address):
         ''' Removes a client from the list of connected clients '''
         async with self.lock:
-            for i, (w, addr) in enumerate(self.connected_clients):
+            for i, (w, addr) in enumerate(self.connected_clients[:]):
                 if w == writer:
-                    del self.connected_clients[i]
-                    del self.ready_status[i]
+                    self.connected_clients.pop(i)
+                    self.ready_status.pop(i)
                     print(f"{address} has disconnected.")
                     await self.broadcast("broadcast", f"Player {i + 1} has left the game.")
                     logging.info(f"{address} disconnected.")
@@ -72,10 +72,15 @@ class GameState:
         async with self.lock:
             for i, (w, addr) in enumerate(self.connected_clients):
                 if w == writer:
-                    self.ready_status[i] = True
+                    self.ready_status[i] = (True, address)
                     await self.broadcast("broadcast", f"Player {self.connected_clients.index((writer, address))} is ready.")
                     logging.info(f"{address} is ready.")
-                    if all(self.ready_status):
+                    # Start game if all players are ready
+                    all_ready = True
+                    for player in self.ready_status:
+                        if(player[0] == False):
+                            all_ready = False
+                    if all_ready:
                         await self.start_game()
                     break
     
@@ -121,7 +126,7 @@ async def handle_client(reader, writer, game_state):
             if command == 'status':
                 status_message = {
                     "status": [
-                        f"Player {i} is {'ready' if ready else 'not ready'}"
+                        f"Player {i} is {'ready' if ready[0] else 'not ready'}"
                         for i, ready in enumerate(game_state.ready_status)
                     ]
                 }
@@ -142,9 +147,13 @@ async def handle_client(reader, writer, game_state):
         logging.error(f"Error handling client {address}: {e}")
         print(f"Error handling client {address}: {e}")
     finally:
-        await game_state.remove_client(writer, address)
-        writer.close()
-        await writer.wait_closed()
+        try:
+            await game_state.remove_client(writer, address)
+            writer.close()
+            await writer.wait_closed()
+        except Exception as e:
+            logging.error(f"Error during handle_client cleanup: {e}")
+            pass
 
 async def main():
     parser = argparse.ArgumentParser(description="TCPoker Server")
