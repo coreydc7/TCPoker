@@ -26,19 +26,23 @@ class ClientState:
         self.valid_commands = []
         self.session = None
         self.state_change_event = asyncio.Event()
+        self.current_state = None
     
     def update_state(self, new_state):
         if new_state == "lobby":
             self.game_active = False
             self.my_turn = False
             self.valid_commands = ['ready', 'status', 'exit']
+            self.current_state = "lobby"
         elif new_state == "game":
             self.game_active = True
             self.valid_commands = ['check', 'bet', 'fold', 'raise', 'exit']
             self.my_turn = False
+            self.current_state = "game"
         elif new_state == "your_turn":
             self.my_turn = True
             self.valid_commands = ['check', 'bet', 'fold', 'raise', 'exit']
+            self.current_state = "your_turn"
         self.state_change_event.set()   # Notify send_messages task of the state change
 
 async def send_messages(sock, session, state):
@@ -80,6 +84,7 @@ async def send_messages(sock, session, state):
                     state.my_turn = False   # Reset turn after sending a command
             else:
                 print(f"\nInvalid command. Valid commands are: {state.valid_commands}")
+                state.update_state(state.current_state)
 
         except (EOFError, KeyboardInterrupt):
             # Handle client termination gracefully
