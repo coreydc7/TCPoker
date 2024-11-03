@@ -136,8 +136,16 @@ class TexasHoldEm:
             
     async def ask_for_blinds(self, bets: List[int]):
         ''' Prompts for both blinds bets '''
-        await self.GameState.notify_turn(0)
+        await self.GameState.broadcast_client(bets[0], "make_bet", f"You are the small blind, how much would you like to bet?: ")
+        await self.GameState.broadcast_others("broadcast", f"Waiting for {self.GameState.connected_clients[bets[0]][2]} to make a move...", self.GameState.connected_clients[bets[0]][0])
             
+        while self.pot == 0:
+            await asyncio.sleep(0.1)
+            
+        await self.GameState.broadcast_client(bets[1], "make_bet", f"You are the big blind, how much would you like to bet? (must be atleast 2x {self.pot}): ")
+        await self.GameState.broadcast_others("broadcast", f"Waiting for {self.GameState.connected_clients[bets[1]][2]} to make a move...", self.GameState.connected_clients[bets[1]][0])
+
+
     
     def print_cards(self, hand: List[Card]):
         ''' Prints any cards passed to it. Useful for showing the community cards '''
