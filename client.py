@@ -27,6 +27,7 @@ class ClientState:
         self.session = None
         self.state_change_event = asyncio.Event()
         self.current_state = None
+        self.name_set = False
     
     def update_state(self, new_state):
         if new_state == "lobby":
@@ -56,7 +57,9 @@ async def send_messages(sock, session, state):
             state.state_change_event.clear()
 
             # Determine the appropriate prompt based on the current state
-            if state.game_active:
+            if(not state.name_set):
+                prompt_text=f"\nWelcome to TCPoker! What is your name?: "
+            elif state.game_active:
                 if state.my_turn:
                     prompt_text = f"\nYour turn! Enter a command {state.valid_commands}: "
                 else:
@@ -70,8 +73,14 @@ async def send_messages(sock, session, state):
             with patch_stdout():
                 command = await session.prompt_async(prompt_text)
 
-            # Handle the user input
-            if command == 'exit':
+            # Handle user input
+            if not state.name_set:
+                message = json.dumps({"username": command}) + "\n"
+                await loop.sock_sendall(sock, message.encode('utf-8'))
+                logging.info(f"Sent username: {message.strip()}")
+                state.name_set = True
+                state.update_state("lobby")
+            elif command == 'exit':
                 message = json.dumps({"command": command}) + "\n"
                 await loop.sock_sendall(sock, message.encode('utf-8'))
                 print("Exiting...")

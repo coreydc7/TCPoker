@@ -121,7 +121,7 @@ class TexasHoldEm:
             small_blind = self.dealer_position
             big_blind = (self.dealer_position + 1) % 2
             
-            await self.GameState.broadcast("broadcast", f"Player {small_blind} is the small blind, and Player {big_blind} is the big blind.")
+            await self.GameState.broadcast("broadcast", f"{self.GameState.connected_clients[small_blind][2]} is the small blind, and {self.GameState.connected_clients[big_blind][2]} is the big blind.")
             await asyncio.sleep(0.1)
             bets = [small_blind, big_blind]
             await self.ask_for_blinds(bets)
@@ -129,7 +129,7 @@ class TexasHoldEm:
             small_blind = (self.dealer_position + 1) % self.num_players
             big_blind = (self.dealer_position + 2) % self.num_players
             
-            await self.GameState.broadcast("broadcast", f"Player {small_blind} is the small blind, and Player {big_blind} is the big blind.")
+            await self.GameState.broadcast("broadcast", f"{self.GameState.connected_clients[small_blind][2]} is the small blind, and {self.GameState.connected_clients[big_blind][2]} is the big blind.")
             await asyncio.sleep(0.1)
             bets = [small_blind, big_blind]
             await self.ask_for_blinds(bets)

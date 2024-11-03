@@ -22,15 +22,15 @@ class GameState:
         self.game = TexasHoldEm(num_players, self)
         self.game_active = False
         
-    async def add_client(self, writer, address):
+    async def add_client(self, writer, address, username):
         ''' Handles adding a client to list of connected clients '''
         async with self.lock:
             if len(self.connected_clients) < self.num_players:
-                self.connected_clients.append((writer, address))
-                self.ready_status.append((False, address))
-                print(f"{address} has connected to the game as Player {self.connected_clients.index((writer, address))}.")
-                await self.broadcast("broadcast", f"{address} has joined the game as Player {self.connected_clients.index((writer, address))}.")
-                logging.info(f"{address} joined the game.")
+                self.connected_clients.append((writer, address, username))
+                self.ready_status.append((False, username))
+                print(f"{address} has connected to the game as {username}.")
+                await self.broadcast("broadcast", f"{address} has joined the game as {username}.")
+                logging.info(f"{address} joined the game with the username {username}.")
                 return len(self.connected_clients)
             else:
                 message = json.dumps({"error": "Unable to join: table is full."}) + '\n'
@@ -39,16 +39,16 @@ class GameState:
                 logging.info(f"{address} attempted to join but the table was full.")
                 return None
                 
-    async def remove_client(self, writer, address):
+    async def remove_client(self, writer):
         ''' Removes a client from the list of connected clients '''
         async with self.lock:
-            for i, (w, addr) in enumerate(self.connected_clients[:]):
+            for i, (w, addr, username) in enumerate(self.connected_clients[:]):
                 if w == writer:
                     self.connected_clients.pop(i)
                     self.ready_status.pop(i)
-                    print(f"{address} has disconnected.")
-                    await self.broadcast("broadcast", f"Player {i + 1} has left the game.")
-                    logging.info(f"{address} disconnected.")
+                    print(f"{username} has disconnected.")
+                    await self.broadcast("broadcast", f"{username} has left the game.")
+                    logging.info(f"{username} ({addr}) disconnected.")
                     break
             if(self.game_active and len(self.connected_clients) == 0):
                 print("All players have left, stopping game.")
@@ -58,23 +58,24 @@ class GameState:
                 
     async def broadcast(self, key, value):
         ''' Writes a JSON message to all connected clients, using {key:message} '''
-        for writer, addr in self.connected_clients:
+        for writer, addr, username in self.connected_clients:
             try:
                 message = json.dumps({key: value}) + "\n"   # New-line delimiter
                 writer.write(message.encode('utf-8'))
                 await writer.drain()
             except Exception as e:
-                print(f"Failed to send message to {addr}: {e}")
-                logging.error(f"Failed to send message to {addr}: {e}")
+                print(f"Failed to send message to {username} ({addr}): {e}")
+                logging.error(f"Failed to send message to {username} ({addr}): {e}")
                 
-    async def set_ready(self, writer, address):
+    async def set_ready(self, writer):
         ''' Marks a client as ready, checks for readiness to start game '''
         async with self.lock:
-            for i, (w, addr) in enumerate(self.connected_clients):
+            for i, (w, addr, username) in enumerate(self.connected_clients):
                 if w == writer:
-                    self.ready_status[i] = (True, address)
-                    await self.broadcast("broadcast", f"Player {self.connected_clients.index((writer, address))} is ready.")
-                    logging.info(f"{address} is ready.")
+                    self.ready_status[i] = (True, username)
+                    await self.broadcast("broadcast", f"{username} is ready.")
+                    logging.info(f"{username} ({addr}) is ready.")
+                    
                     # Start game if all players are ready
                     all_ready = True
                     for player in self.ready_status:
@@ -94,25 +95,18 @@ class GameState:
     
     async def notify_turn(self, current_player):
         ''' Notifies the current player it's their turn '''
-        writer, addr = self.connected_clients[current_player]
+        writer, addr, username = self.connected_clients[current_player]
         try:
             message = json.dumps({"your_turn": True}) + "\n"
             writer.write(message.encode('utf-8'))
             await writer.drain()
-            logging.info(f"Notified player {current_player + 1} it's their turn.")
+            logging.info(f"Notified {username} ({addr}) it's their turn.")
         except Exception as e:
-            logging.error(f"Failed to notify player {current_player + 1}: {e}")
+            logging.error(f"Failed to notify {username} ({addr}): {e}")
 
 async def handle_client(reader, writer, game_state):
     ''' Main client event handler '''
     address = writer.get_extra_info('peername')
-    player_number = await game_state.add_client(writer, address)
-    
-    if player_number is None:
-        writer.close()
-        await writer.wait_closed()
-        return
-    
     try:
         while True:
             data = await reader.read(4096)
@@ -120,35 +114,48 @@ async def handle_client(reader, writer, game_state):
                 break
             
             message = json.loads(data.decode('utf-8'))
-            command = message.get("command", "").strip()
-            logging.info(f"Received command from {address}: {command}")
-            
-            if command == 'status':
-                status_message = {
-                    "status": [
-                        f"Player {i} is {'ready' if ready[0] else 'not ready'}"
-                        for i, ready in enumerate(game_state.ready_status)
-                    ]
-                }
-                message = json.dumps(status_message) + "\n"
-                writer.write(message.encode('utf-8'))
-                await writer.drain()
+            logging.info(f"Received message from {address}: {message}")
+
+            # Messages are JSON key:value pairs
+            message_key = list(message.keys())[0]
+            if message_key == 'username':     # The first thing a client does upon connection is send their custom username as a message
+                added_player = await game_state.add_client(writer, address, message['username'])
                 
-            elif command == 'ready':
-                await game_state.set_ready(writer, address)
-            elif command == 'exit':
-                break
-            else:
-                error_message = {"error": f"Unknown command received: {command}"}
-                message = json.dumps(error_message) + "\n"
-                writer.write(message.encode('utf-8'))
-                await writer.drain()    
+                if added_player is None:
+                    writer.close()
+                    await writer.wait_closed()
+                    return
+                        
+            elif message_key == 'command':
+                command = message.get("command", "").strip()
+                
+                # Handle the various game commands
+                if command == 'status':
+                    status_message = {
+                        "status": [
+                            f"{player[1]} is {'ready' if player[0] else 'not ready'}"
+                            for player in game_state.ready_status
+                        ]
+                    }
+                    message = json.dumps(status_message) + "\n"
+                    writer.write(message.encode('utf-8'))
+                    await writer.drain()
+                    
+                elif command == 'ready':
+                    await game_state.set_ready(writer)
+                elif command == 'exit':
+                    break
+                else:
+                    error_message = {"error": f"Unknown command received: {command}"}
+                    message = json.dumps(error_message) + "\n"
+                    writer.write(message.encode('utf-8'))
+                    await writer.drain()    
     except Exception as e:
         logging.error(f"Error handling client {address}: {e}")
         print(f"Error handling client {address}: {e}")
     finally:
         try:
-            await game_state.remove_client(writer, address)
+            await game_state.remove_client(writer)
             writer.close()
             await writer.wait_closed()
         except Exception as e:
