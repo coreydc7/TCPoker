@@ -40,10 +40,10 @@ class ClientState:
             self.valid_commands = ['check', 'bet', 'fold', 'raise', 'exit']
             self.my_turn = False
             self.current_state = "game"
-        elif new_state == "your_turn":
+        elif new_state == "make_bet":
             self.my_turn = True
-            self.valid_commands = ['check', 'bet', 'fold', 'raise', 'exit']
-            self.current_state = "your_turn"
+            self.valid_commands = ['bet']
+            self.current_state = "make_bet"
         self.state_change_event.set()   # Notify send_messages task of the state change
 
 async def send_messages(sock, session, state):
@@ -73,24 +73,27 @@ async def send_messages(sock, session, state):
             with patch_stdout():
                 command = await session.prompt_async(prompt_text)
 
+            # Split commands such as 'bet 100' into parts ['bet', '100'] or 'bet' into ['bet']
+            command_parts = command.strip().split()
+            
             # Handle user input
             if not state.name_set:
-                message = json.dumps({"username": command}) + "\n"
+                message = json.dumps({"username": command_parts}) + "\n"
                 await loop.sock_sendall(sock, message.encode('utf-8'))
                 logging.info(f"Sent username: {message.strip()}")
                 state.name_set = True
                 state.update_state("lobby")
             elif command == 'exit':
-                message = json.dumps({"command": command}) + "\n"
+                message = json.dumps({"command": command_parts}) + "\n"
                 await loop.sock_sendall(sock, message.encode('utf-8'))
                 print("Exiting...")
                 return
-            elif command in state.valid_commands:
-                message = json.dumps({"command": command}) + "\n"
-                await loop.sock_sendall(sock, message.encode('utf-8'))
-                logging.info(f"Sent command: {message.strip()}")
-                if state.my_turn:
-                    state.my_turn = False   # Reset turn after sending a command
+            elif command_parts[0] in state.valid_commands: 
+                        message = json.dumps({"command": command_parts}) + "\n"
+                        await loop.sock_sendall(sock, message.encode('utf-8'))
+                        logging.info(f"Sent command: {message.strip()}")
+                        if state.my_turn:
+                            state.my_turn = False   # Reset turn after sending a command
             else:
                 print(f"\nInvalid command. Valid commands are: {state.valid_commands}")
                 state.update_state(state.current_state)
@@ -103,7 +106,7 @@ async def send_messages(sock, session, state):
             return
         except Exception as e:
             logging.error(f"Failed to send command: {e}")
-            print(f"\nError: {e}")
+            print(f"\Failed to send command: {e}")
             return
 
 async def receive_messages(sock, state):
@@ -139,9 +142,9 @@ async def receive_messages(sock, state):
                     elif "game_start" in message:
                         print(f"\n{message['game_start']}")
                         state.update_state("game")
-                    elif "your_turn" in message:
-                        print("\nIt is now your turn!")
-                        state.update_state("your_turn")
+                    elif "make_bet" in message:
+                        print(f"\n{message['make_bet']}")
+                        state.update_state("make_bet")
                     
                 except json.JSONDecodeError:
                     logging.error(f"Invalid JSON received: {msg}")
