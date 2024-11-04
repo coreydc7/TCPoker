@@ -15,16 +15,20 @@ This is a simple Texas Hold'em game implemented over TCP using Python
 * During each betting round, each client will take turns entering their bet action. All other clients wait for their turn, and messages indicating the other clients actions are broadcast to every client. Each client has the option to 'check', 'call', 'raise', or 'fold' their hand.
 * After each betting round, a new card is dealt onto the table, and a new round of betting begins. There are four total betting rounds, where players will have to leverage poker strategy to win the game.
 * At the end of the fourth betting round, the player who can assemble the best 5 card poker hand from the 5 community cards and their two hole cards will win all the bet money in the pot.
-4. **Current Progress** \
-  Last Updated for Sprint 2 submission 10/20/2024
+4. **Sprint Progress** \
+  Sprint 2
 * `client.py`: Client script is able to be started and connect to the server. Logs connection and disconnection attempts in console. Clients are able to communicate with the server through various actions ['join', 'exit', 'ready', 'status'] and process/display the servers response. Client connections are persistent, and will stay connected until the 'exit' command is entered, which will trigger a graceful disconnect, closing the socket and selector. This allows for the client to send many messages and process their responses, all over a single socket connection. Each client is handled asynchronously, so incoming messages from the server do not interrupt client input. All server messages are displayed above the line prompting for client input, which ensures a smooth command-line UI. The flag '-v' displays debug information, and shows debug messages sent from the server, such as other clients connection and disconnection attempts. 
 * `server.py`: Server script is able to be started and listen for incoming connections over a port. Handles multiple client connections simultaneously. Logs connection and disconnection events in console. Server initializes the Texas Hold'em game, and maintains a list of connected clients and their associated gamestates. Once all clients have readied up, the server begins the game. Server is able to process incoming JSON messages and individually send out responses, or broadcast a message to all other connected clients. Automatically broadcasts debug information to all clients, such as other clients connections/disconnections. Handles 'join' and 'exit' (connection/disconnection) requests from the client gracefully.
 * `poker_offline.py`: Poker script is functional and able to be executed via `python poker_offline.py`. Allows for entering the number of players, and then proceeds to start a Texas Hold'em Poker game utilizing the game flow and structure outlined above. It is entirely offline, so player's hands and all other debug information is printed to the console. Player input information is gathered locally through the console. All game functions are working, including the function to algorithmically determine the best 5-card poker hand from the 7-card list of community cards + hole cards. This serves as an extremely solid base to begin implementation on the online functionalities, in a separate file `poker.py`.
+
+Sprint 3
+* `server.py`: Server script manages game state using GameState class. This class utilizes broadcast methods to broadcast game state updates to a specific client, every client except a certain client, or to all connected clients. Notifies clients of disconnections and handles them gracefully.
+* `client.py`: Client renders game state updates depending on JSON message contents. As the game state is managed by the GameState class, a consistent game state is broadcast to all clients. Each client has a ClientState class to hold information about the state of the client, such as whether it is that clients turn or not. The server synchronizes turn information across all clients, and clients who are waiting receive a "Waiting for X to make a move..." message. Upon initial connection to a server, clients are prompted to submit their own custom username which is used to identify that connected client and track their game state. 
   
 **Protocol (work in progress)** \
 The game flow has been outlined under "Play the game", and the internal protocol for executing this game flow is as follows:
-* When a client wants to join the game, it sends a 'join' action request: ```{ 
-                "action": "join" 
+* When a client wants to join the game, it sends a 'username' message signaling their username: ```{ 
+                "username": "xyz" 
         }```
 * The server acknowledges the connection, and provides current player information: ```{
                 "response": "connect",
