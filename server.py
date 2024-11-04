@@ -21,6 +21,7 @@ class GameState:
         self.lock = asyncio.Lock()
         self.game = TexasHoldEm(num_players, self)
         self.game_active = False
+        self.events = {}
         
     async def add_client(self, writer, address, username):
         ''' Handles adding a client to list of connected clients '''
@@ -176,6 +177,8 @@ async def handle_client(reader, writer, game_state):
                             bet_amount = int(command[1])
                             game_state.game.players[_index].bet(bet_amount)
                             game_state.game.pot += bet_amount
+                            if not game_state.events['small_blind'].is_set():
+                                game_state.events['small_blind'].set()
                             await game_state.broadcast("broadcast", f"{_username} has added ${bet_amount} to the pot.")
                             logging.info(f"{_username} ({address}) bets ${bet_amount}")
                         except ValueError:

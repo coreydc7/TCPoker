@@ -139,6 +139,8 @@ class TexasHoldEm:
         small_blind = bets[0]
         big_blind = bets[1]
         
+        self.GameState.events['small_blind'] = asyncio.Event()
+        
         await self.GameState.broadcast_client(
             small_blind,
             "make_bet",
@@ -150,8 +152,9 @@ class TexasHoldEm:
             self.GameState.connected_clients[small_blind][0]
         )
         
-        while(self.pot == 0):
-            await asyncio.sleep(0.1)
+        # while(self.pot == 0):
+        #     await asyncio.sleep(0.1)
+        await self.GameState.events['small_blind'].wait()
         
         await self.GameState.broadcast_client(
             big_blind,
