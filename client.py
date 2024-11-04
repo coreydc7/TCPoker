@@ -134,6 +134,7 @@ async def receive_messages(sock, state):
 
                     if "error" in message:
                         print(f"\nError: {message['error']}")
+                        state.update_state(state.current_state)
                     elif "broadcast" in message:
                         print(f"\n{message['broadcast']}")
                     elif "status" in message:

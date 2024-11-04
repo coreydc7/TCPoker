@@ -100,7 +100,6 @@ class GameState:
                     logging.info(f"{username} ({addr}) is ready.")
                     
                     # Start game if all players are ready
-                    print(self.ready_status) # DEBUG
                     all_ready = True
                     for (ready, username) in self.ready_status:
                         if(ready == False):
@@ -159,14 +158,31 @@ async def handle_client(reader, writer, game_state):
                 elif command[0] == 'exit':
                     break
                 elif command[0] == 'bet':
-                    _username = None
-                    for players in game_state.connected_clients:
-                        if players[0] == writer:
-                            _username = players[2]
-                            
-                    logging.info(f"{_username} ({address}) bets ${command[1]}")
-                    await game_state.broadcast("broadcast", f"{_username} has added ${command[1]} to the pot.")
-                    game_state.game.pot += int(command[1])
+                    if(len(command) != 2):
+                        error_message = {"error": f"Please enter a bet amount (ex: bet 10)"}
+                        message = json.dumps(error_message) + "\n"
+                        writer.write(message.encode('utf-8'))
+                        await writer.drain()   
+                    else:
+                        # Find the username and index of player who sent the command
+                        _username = None
+                        _index = None
+                        for i, players in enumerate(game_state.connected_clients):
+                            if players[0] == writer:
+                                _username = players[2]
+                                _index = i
+                                break
+                        try:
+                            bet_amount = int(command[1])
+                            game_state.game.players[_index].bet(bet_amount)
+                            game_state.game.pot += bet_amount
+                            await game_state.broadcast("broadcast", f"{_username} has added ${bet_amount} to the pot.")
+                            logging.info(f"{_username} ({address}) bets ${bet_amount}")
+                        except ValueError:
+                            error_message = {"error": f"Please enter a valid bet amount. You currently have {game_state.game.players[_index].stack}"}
+                            message = json.dumps(error_message) + "\n"
+                            writer.write(message.encode('utf-8'))
+                            await writer.drain()    
                 else:
                     error_message = {"error": f"Unknown command received: {command[0]}"}
                     message = json.dumps(error_message) + "\n"

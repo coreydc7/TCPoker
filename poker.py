@@ -96,12 +96,12 @@ class TexasHoldEm:
         self.small_blind = 0
         self.big_blind = 0
         self.GameState = GameState
+        self.bet_futures = {}
         
     async def play_hand(self):
         ''' Main game flow for every hand '''
-        self.deal_hole_cards()  # Pre-flop
-        
         await self.post_blinds()  # Small and big blinds (forced bets)
+        self.deal_hole_cards()  # Pre-flop
 
     def create_deck(self) -> List[Card]:
         ''' Create and shuffle a standard 52-card deck '''
@@ -136,16 +136,33 @@ class TexasHoldEm:
             
     async def ask_for_blinds(self, bets: List[int]):
         ''' Prompts for both blinds bets '''
-        await self.GameState.broadcast_client(bets[0], "make_bet", f"You are the small blind, how much would you like to bet?: ")
-        await self.GameState.broadcast_others("broadcast", f"Waiting for {self.GameState.connected_clients[bets[0]][2]} to make a move...", self.GameState.connected_clients[bets[0]][0])
-            
-        while self.pot == 0:
+        small_blind = bets[0]
+        big_blind = bets[1]
+        
+        await self.GameState.broadcast_client(
+            small_blind,
+            "make_bet",
+            f"You are the small blind, how much would you like to bet? You currently have {self.players[small_blind].stack}: "
+        )
+        await self.GameState.broadcast_others(
+            "broadcast",
+            f"Waiting for {self.GameState.connected_clients[small_blind][2]} to make a move...", 
+            self.GameState.connected_clients[small_blind][0]
+        )
+        
+        while(self.pot == 0):
             await asyncio.sleep(0.1)
-            
-        await self.GameState.broadcast_client(bets[1], "make_bet", f"You are the big blind, how much would you like to bet? (must be atleast 2x {self.pot}): ")
-        await self.GameState.broadcast_others("broadcast", f"Waiting for {self.GameState.connected_clients[bets[1]][2]} to make a move...", self.GameState.connected_clients[bets[1]][0])
-
-
+        
+        await self.GameState.broadcast_client(
+            big_blind,
+            "make_bet",
+            f"You are the big blind, how much would you like to bet? You currently have {self.players[big_blind].stack}: "
+        )
+        await self.GameState.broadcast_others(
+            "broadcast", 
+            f"Waiting for {self.GameState.connected_clients[big_blind][2]} to make a move...", 
+            self.GameState.connected_clients[big_blind][0]
+        )
     
     def print_cards(self, hand: List[Card]):
         ''' Prints any cards passed to it. Useful for showing the community cards '''
