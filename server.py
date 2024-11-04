@@ -115,7 +115,7 @@ class GameState:
         logging.info("All players are ready. Starting game.")
         self.game_active = True
         
-        await self.game.play_hand()   # Starts the main game flow
+        await self.game.post_blinds()   # Starts the main game flow
     
     
 async def handle_client(reader, writer, game_state):
@@ -179,6 +179,8 @@ async def handle_client(reader, writer, game_state):
                             game_state.game.pot += bet_amount
                             if not game_state.events['small_blind'].is_set():
                                 game_state.events['small_blind'].set()
+                            elif not game_state.events['big_blind'].is_set():
+                                game_state.events['big_blind'].set()
                             await game_state.broadcast("broadcast", f"{_username} has added ${bet_amount} to the pot.")
                             logging.info(f"{_username} ({address}) bets ${bet_amount}")
                         except ValueError:
