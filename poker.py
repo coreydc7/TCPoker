@@ -97,11 +97,6 @@ class TexasHoldEm:
         self.big_blind = 0
         self.GameState = GameState
         self.bet_futures = {}
-        
-    async def play_hand(self):
-        ''' Main game flow for every hand '''
-        await self.post_blinds()  # Small and big blinds (forced bets)
-        self.deal_hole_cards()  # Pre-flop
 
     def create_deck(self) -> List[Card]:
         ''' Create and shuffle a standard 52-card deck '''
@@ -109,14 +104,8 @@ class TexasHoldEm:
         self.random.shuffle(deck)
         return deck
     
-    def deal_hole_cards(self):
-        ''' Deal 2 hole cards to each player '''
-        for _ in range(2):
-            for player in self.players:
-                player.add_card(self.deck.pop())
-    
     async def post_blinds(self):
-        ''' Posts blinds differently for 2 and >2 player games '''
+        ''' Posts blinds differently for 2 and >2 player games. Entry point into game'''
         if self.num_players == 2:
             small_blind = self.dealer_position
             big_blind = (self.dealer_position + 1) % 2
@@ -140,6 +129,7 @@ class TexasHoldEm:
         big_blind = bets[1]
         
         self.GameState.events['small_blind'] = asyncio.Event()
+        self.GameState.events['big_blind'] = asyncio.Event()
         
         await self.GameState.broadcast_client(
             small_blind,
@@ -152,8 +142,6 @@ class TexasHoldEm:
             self.GameState.connected_clients[small_blind][0]
         )
         
-        # while(self.pot == 0):
-        #     await asyncio.sleep(0.1)
         await self.GameState.events['small_blind'].wait()
         
         await self.GameState.broadcast_client(
@@ -166,6 +154,24 @@ class TexasHoldEm:
             f"Waiting for {self.GameState.connected_clients[big_blind][2]} to make a move...", 
             self.GameState.connected_clients[big_blind][0]
         )
+        
+        await self.GameState.events['big_blind'].wait()
+        
+        await self.deal_hole_cards()
+         
+    async def deal_hole_cards(self):
+        ''' Deal 2 hole cards to each player '''
+        for _ in range(2):
+            for player in self.players:
+                player.add_card(self.deck.pop())
+                
+        await self.begin_betting()
+        
+    async def begin_betting(self):
+        await self.GameState.broadcast("broadcast", f"Blinds have been collected. The pot is now ${self.pot}")
+        await asyncio.sleep(0.1)
+        for i, player in enumerate(self.players):
+            await self.GameState.broadcast_client(i, "broadcast", player)
     
     def print_cards(self, hand: List[Card]):
         ''' Prints any cards passed to it. Useful for showing the community cards '''
