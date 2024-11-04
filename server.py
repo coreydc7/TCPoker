@@ -2,6 +2,7 @@ import asyncio
 import json
 import logging
 import argparse
+from typing import List
 
 logging.basicConfig(
     # Configure logging
@@ -12,28 +13,19 @@ logging.basicConfig(
 
 class Player:
     ''' Manages state of each player '''
-    def __init__(self, name, writer, stack=1000):
+    def __init__(self, name, writer, stack=100):
         self.name = name
         self.writer = writer
         self.ready = False
         self.stack = stack  
         self.hand = []
 
-    # def to_dict(self):
-    #     return {
-    #         "name": self.name,
-    #         "ready": self.ready,
-    #         "stack": self.stack,
-    #         "hand": [str(card) for card in self.hand]
-    #     }
-
 class TCPokerServer:
     ''' Manages state of the Poker Game '''
     def __init__(self):
         self.players = []
         self.pot = 0
-        self.small_blind = 10
-        self.big_blind = 20
+        self.ante = 10
         self.deck = self.create_deck()
 
     def create_deck(self):
@@ -95,10 +87,13 @@ class TCPokerServer:
                 return
             elif command.startswith("bet"):
                 amount = int(message["command"][1]) if len(message["command"]) > 1 else 0
-                self.pot += amount
-                player.stack -= amount
-                await self.broadcast({"broadcast": f"{player.name} bets ${amount}. Pot is now ${self.pot}."})
-                logging.info(f"{player.name} bets ${amount}. Pot: ${self.pot}")
+                if amount <= player.stack:
+                    self.pot += amount
+                    player.stack -= amount
+                    await self.broadcast({"broadcast": f"{player.name} bets ${amount}. Pot is now ${self.pot}."})
+                    logging.info(f"{player.name} bets ${amount}. Pot: ${self.pot}")
+                else:
+                    await self.send_message(player, {"error": "Bet amount exceeds stack."})
             else:
                 await self.send_message(player, {"error": "Unknown command."})
         else:
@@ -107,32 +102,22 @@ class TCPokerServer:
     async def check_all_ready(self):
         ''' Check if all clients are ready to start the game '''
         if len(self.players) == 2 and all(p.ready for p in self.players):
+            await self.broadcast({"start_game": True})      # Notify clients that game has started
             await self.start_game()
 
     async def start_game(self):
         ''' Main Poker game flow'''
         await self.broadcast({"broadcast": "All players are ready. Starting the game!"})
-        # Begin by posting blinds
-        await self.post_blinds()
+        # Begin by collecting the ante from all clients
+        await self.collect_ante()
         # Then deal hole cards
         await self.deal_hands()
         # Continue with game logic 
-
-    async def post_blinds(self):
-        ''' Posts blinds for a 2-player game '''
-        small_blind_player = self.players[0]
-        big_blind_player = self.players[1]
-        self.pot += self.small_blind + self.big_blind
-        small_blind_player.stack -= self.small_blind
-        big_blind_player.stack -= self.big_blind
-        await self.broadcast({
-            "broadcast": f"{small_blind_player.name} posts small blind (${self.small_blind}).",
-        })
-        await self.broadcast({
-            "broadcast": f"{big_blind_player.name} posts big blind (${self.big_blind}).",
-        })
-        logging.info(f"Blinds posted: {small_blind_player.name} (${self.small_blind}), {big_blind_player.name} (${self.big_blind}). Pot: ${self.pot}")
-
+        
+    async def collect_ante(self):
+        ''' Collect the ante from each client '''
+        await self.broadcast({"action": "collect_ante", "amount": self.ante})
+        
     async def deal_hands(self):
         for player in self.players:
             player.hand = [self.deck.pop(), self.deck.pop()]
