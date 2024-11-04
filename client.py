@@ -1,213 +1,149 @@
-import socket
-import argparse
-import logging
 import asyncio
 import json
+import logging
+import argparse
 from prompt_toolkit import PromptSession
 from prompt_toolkit.patch_stdout import patch_stdout
 
-def setup_logging():
-    ''' Configure logging '''
-    logging.basicConfig(
-        filename='client.log',
-        level=logging.INFO,
-        format='%(asctime)s - %(levelname)s - %(message)s'
+
+logging.basicConfig(
+    # Configure logging
+    filename='client.log',
+    level=logging.INFO, 
+    format='%(asctime)s - %(levelname)s - %(message)s'
     )
 
-class ClientState:
-    ''' This class manages the state of the client. 
-        During different stages of the game, the valid_commands changes.
-        These changes signal an asyncio.Event(), 
-        which updates the on-screen prompt with the currently expected commands. '''
+
+class TCPokerClient:
+    ''' Manages client state '''
+    def __init__(self, host, port, username):
+        self.host = host
+        self.port = port
+        self.username = username
+        self.reader = None
+        self.writer = None
+        self.session = PromptSession()
+        self.valid_commands = ['ready', 'status', 'exit']
+        self.game_started = False
+        self.refresh_prompt_event = asyncio.Event()    # This event signals for a client prompt refresh
         
-    def __init__(self):
-        self.game_active = False
-        self.my_turn = False
-        self.valid_commands = []
-        self.session = None
-        self.state_change_event = asyncio.Event()
-        self.current_state = None
-        self.name_set = False
-    
-    def update_state(self, new_state):
-        if new_state == "lobby":
-            self.game_active = False
-            self.my_turn = False
-            self.valid_commands = ['ready', 'status', 'exit']
-            self.current_state = "lobby"
-        elif new_state == "game":
-            self.game_active = True
-            self.valid_commands = ['check', 'bet', 'fold', 'raise', 'exit']
-            self.my_turn = False
-            self.current_state = "game"
-        elif new_state == "make_bet":
-            self.my_turn = True
-            self.valid_commands = ['bet']
-            self.current_state = "make_bet"
-        self.state_change_event.set()   # Notify send_messages task of the state change
-
-async def send_messages(sock, session, state):
-    loop = asyncio.get_event_loop()
-    state.session = session
-
-    while True:
+        
+    async def connect(self):
+        ''' First thing a client does is connect to the server and send their custom username '''
         try:
-            # Wait for a state change before prompting
-            await state.state_change_event.wait()
-            state.state_change_event.clear()
-
-            # Determine the appropriate prompt based on the current state
-            if(not state.name_set):
-                prompt_text=f"\nWelcome to TCPoker! What is your name?: "
-            elif state.game_active:
-                if state.my_turn:
-                    prompt_text = f"\nYour turn! Enter a command {state.valid_commands}: "
-                else:
-                    # Not clients turn, no action required
-                    await asyncio.sleep(0.1)
-                    continue
-            else:
-                prompt_text = f"\nEnter a command {state.valid_commands}: "
-
-            # Prompt for user input
-            with patch_stdout():
-                command = await session.prompt_async(prompt_text)
-
-            # Split commands such as 'bet 100' into parts ['bet', '100'] or 'bet' into ['bet']
-            command_parts = command.strip().split()
+            self.reader, self.writer = await asyncio.open_connection(self.host, self.port)
+            logging.info(f"Connected to server at {self.host}:{self.port}")
+            await self.send_message({"username": self.username})
             
-            # Handle user input
-            if not state.name_set:
-                message = json.dumps({"username": command_parts}) + "\n"
-                await loop.sock_sendall(sock, message.encode('utf-8'))
-                logging.info(f"Sent username: {message.strip()}")
-                state.name_set = True
-                state.update_state("lobby")
-            elif command == 'exit':
-                message = json.dumps({"command": command_parts}) + "\n"
-                await loop.sock_sendall(sock, message.encode('utf-8'))
-                print("Exiting...")
-                return
-            elif command_parts[0] in state.valid_commands: 
-                        message = json.dumps({"command": command_parts}) + "\n"
-                        await loop.sock_sendall(sock, message.encode('utf-8'))
-                        logging.info(f"Sent command: {message.strip()}")
-                        if state.my_turn:
-                            state.my_turn = False   # Reset turn after sending a command
-            else:
-                print(f"\nInvalid command. Valid commands are: {state.valid_commands}")
-                state.update_state(state.current_state)
-
-        except (EOFError, KeyboardInterrupt):
-            # Handle client termination gracefully
-            message = json.dumps({"command": "exit"}) + "\n"
-            await loop.sock_sendall(sock, message.encode('utf-8'))
-            print("\nExiting...")
-            return
+            self.refresh_prompt_event.set()
+            
+            # Start tasks for receiving messages and handling user input
+            receive_task = asyncio.create_task(self.receive_messages())        # Receive messages asynchronously above the client input loop
+            input_task = asyncio.create_task(self.input_loop())        # Utilizes PromptToolkit for an asynchronous input()
+            await asyncio.gather(receive_task, input_task)
         except Exception as e:
-            logging.error(f"Failed to send command: {e}")
-            print(f"\Failed to send command: {e}")
-            return
+            logging.error(f"Connection failed: {e}")
 
-async def receive_messages(sock, state):
-    loop = asyncio.get_event_loop()
-    buffer = ""
 
-    while True:
+    async def send_message(self, message):
+        ''' Sends a message to server using clients StreamWriter '''
         try:
-            data = await loop.sock_recv(sock, 4096)
-            if not data:
-                print("\nDisconnected from server.")
-                return
-
-            buffer += data.decode('utf-8')
-            messages = buffer.split("\n")   # '\n' is used as a de-limiter to handle multiple messages. Do not forget to add \n to the end of messages sent.
-            buffer = messages.pop()  # Save the last incomplete message
-
-            for msg in messages:
-                if not msg.strip():
-                    continue
-
-                try:
-                    message = json.loads(msg)
-                    logging.info(f"Received message from server: {message}")
-
-                    if "error" in message:
-                        print(f"\nError: {message['error']}")
-                        state.update_state(state.current_state)
-                    elif "broadcast" in message:
-                        print(f"\n{message['broadcast']}")
-                    elif "status" in message:
-                        print(f"\n{message['status']}")
-                        state.update_state("lobby")
-                    elif "game_start" in message:
-                        print(f"\n{message['game_start']}")
-                        state.update_state("game")
-                    elif "make_bet" in message:
-                        print(f"\n{message['make_bet']}")
-                        state.update_state("make_bet")
-                    
-                except json.JSONDecodeError:
-                    logging.error(f"Invalid JSON received: {msg}")
-        except ConnectionResetError:
-            print("\nConnection closed by server.")
-            return
+            self.writer.write((json.dumps(message) + "\n").encode())        # All messages end with '\n' delimiter
+            await self.writer.drain()
+            logging.info(f"{self.username} Sent: {message}")
         except Exception as e:
-            print(f"\nError receiving message: {e}")
+            logging.error(f"Failed to send message: {e}")
+
+
+    async def receive_messages(self):
+        ''' Asyncio task, received messages print above clients input_loop() '''
+        try:
+            while True:
+                data = await self.reader.readline()
+                if not data:
+                    logging.info("Server closed the connection.")
+                    print("Disconnected from server.")
+                    break
+                message = json.loads(data.decode())
+                logging.info(f"{self.username} received message: {message}")
+                await self.handle_message(message)      # Handle received messages
+        except Exception as e:
             logging.error(f"Error receiving message: {e}")
+
+
+    async def handle_message(self, message):
+        ''' Handles any received messages '''
+        if "broadcast" in message:
+            print(f"\n{message['broadcast']}")
+        elif "status" in message:
+            status = message['status']
+            print("\nPlayer Status:")
+            for name, ready in status.items():
+                print(f"{name}: {'Ready' if ready else 'Not Ready'}")
+        elif "hand" in message:
+            print(f"\nYour hand: {', '.join(message['hand'])}")
+        elif "error" in message:
+            print(f"\nError: {message['error']}")
+        elif "start_game" in message:
+            self.game_started = True
+        elif "action" in message:
+            if message["action"] == "collect_ante":
+                print(f"\nYou must bet the ante ({message['amount']}) to participate in this hand.")
+                self.valid_commands = ['bet']
+                # await asyncio.sleep(0.1)
+                self.refresh_prompt_event.set()       # Refresh the prompt with new valid_commands
+                
+                
+    async def prompt_user(self):
+        ''' Prompts the user for input '''
+        command = await self.session.prompt_async(f"Enter a command {self.valid_commands}: ")
+        await self.process_command(command)
+        
+        
+    async def process_command(self, command):
+        ''' Process the user's command '''
+        cmd_parts = command.strip().split()
+        if not cmd_parts:
             return
+        
+        cmd = cmd_parts[0].lower()
+        if cmd in self.valid_commands:
+            if cmd.startswith("bet"):   # Certain commands must contain two parts, such as "bet 100"
+                if len(cmd_parts) != 2 or not cmd_parts[1].isdigit():
+                    print("Usage: bet <amount>")
+                    return
+                await self.send_message({"command": cmd_parts})
+            else:
+                await self.send_message({"command": cmd_parts})
+                
+            if cmd == 'exit':
+                print("Exiting game.")
+                self.writer.close()
+                await self.writer.wait_closed()
+        else:
+            print(f"Unknown command entered: {cmd}")
+            
 
-async def main():
-    parser = argparse.ArgumentParser(description="TCPoker Client")
-    parser.add_argument('-i', '--ip', type=str, required=True, help='Server IP Address.')
-    parser.add_argument('-p', '--port', type=int, required=True, help='Server Port.')
-    args = parser.parse_args()
-
-    setup_logging()
-    server_address = (args.ip, args.port)
-    sock = None
-    tasks = []
-
-    try:
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.connect_ex(server_address)
-        sock.setblocking(False)  # Set socket to non-blocking mode
-        logging.info(f"Connected to {server_address}")
-
-        state = ClientState()
-        state.update_state("lobby")  # Initialize state to 'lobby'
-
-        session = PromptSession()
-
-        receive_task = asyncio.create_task(receive_messages(sock, state))
-        send_task = asyncio.create_task(send_messages(sock, session, state))
-        tasks = [receive_task, send_task]
-
-        done, pending = await asyncio.wait(
-            tasks,
-            return_when=asyncio.FIRST_COMPLETED
-        )
-
-        for task in pending:
-            task.cancel()
-            try:
-                await task
-            except asyncio.CancelledError:
-                pass
-
-    except Exception as e:
-        logging.error(f"Error in main loop {e}.")
-        print(f"\nError in main loop: {e}")
-    finally:    # Cleanup after a client disconnects
-        for task in tasks:
-            if not task.done():
-                task.cancel()
-        if sock:
-            sock.close()
-            logging.info(f"Client disconnecting from {server_address}.")
+    async def input_loop(self):
+        ''' Main clients input loop '''
+        with patch_stdout():
+            while True:
+                await self.refresh_prompt_event.wait()
+                self.refresh_prompt_event.clear()
+                await self.prompt_user()
+               
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="TCP Poker Client")
+    parser.add_argument('-i', '--ip', type=str, required=True, help='Server IP Address.')
+    parser.add_argument('-p', '--port', type=int, required=True, help='Server Port.')
+    parser.add_argument('-u', '--username', type=str, required=True, help='Your username.')
+
+    args = parser.parse_args()
+
+    client = TCPokerClient(args.ip, args.port, args.username)
     try:
-        asyncio.run(main())
+        asyncio.run(client.connect())
     except KeyboardInterrupt:
-        print("\nClient terminated by user")
+        logging.info("Client terminated manually.")
+        print("\nClient terminated manually.")
