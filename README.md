@@ -28,7 +28,7 @@ Sprint 3
 * `client.py`: Client renders game state updates depending on JSON message contents. As the game state is managed by the GameState class, a consistent game state is broadcast to all clients. Each client has a ClientState class to hold information about the state of the client, such as whether it is that clients turn or not. The server synchronizes turn information across all clients, and clients who are waiting receive a "Waiting for X to make a move..." message. Upon initial connection to a server, clients are prompted to submit their own custom username which is used to identify that connected client and track their game state.
 
 Sprint 4 
-* notes: I refactored the entire codebase one day after the Sprint 3 deadline. The functionality is mostly the same, but I was able to do the same thing with much less and simpler code, as I already had a good idea of the execution flow. I also was able to eliminate a race condition that was causing the server to hang only when clients connected/readied up in a specific order. 
+* notes: I refactored the entire codebase one day after the Sprint 3 deadline. The functionality is mostly the same, but I was able to do the same thing with less code, as I had a better idea of the execution flow. I also was able to eliminate a race condition that was causing the server to hang only when clients connected/readied up in a specific order. 
   
 **Protocol (work in progress)** \
 Updated 11/4/2024 \
