@@ -18,6 +18,7 @@ class Player:
         self.ready = False
         self.stack = stack  
         self.hand = []
+        self.ante_placed = False
 
 class TCPokerServer:
     ''' Manages state of the Poker Game '''
@@ -26,6 +27,13 @@ class TCPokerServer:
         self.pot = 0
         self.ante = 10
         self.deck = self.create_deck()
+        self.ante_event = asyncio.Event()
+        
+    def check_all_ante(self):
+        if all(player.ante_placed for player in self.players):
+            self.ante_event.set()
+        else:
+            self.ante_event.clear()
 
     def create_deck(self):
         suits = ['♠', '♥', '♦', '♣']
@@ -84,11 +92,16 @@ class TCPokerServer:
                 await self.send_message(player, {"status": status})
             elif command == "exit":
                 return
-            elif command.startswith("bet"):
+            elif command.startswith("ante"):
                 amount = int(message["command"][1]) if len(message["command"]) > 1 else 0
                 if amount <= player.stack:
                     self.pot += amount
                     player.stack -= amount
+                    if not player.ante_placed:
+                        player.ante_placed = True
+                        self.check_all_ante()
+                        if not self.ante_event.is_set():
+                            await self.send_message(player, {"broadcast": "Waiting for all players to place their ante..."})
                     await self.broadcast({"broadcast": f"{player.name} bets ${amount}. Pot is now ${self.pot}."})
                     logging.info(f"{player.name} bets ${amount}. Pot: ${self.pot}")
                 else:
@@ -108,16 +121,21 @@ class TCPokerServer:
         ''' Main Poker game flow'''
         await self.broadcast({"broadcast": "All players are ready. Starting the game!"})
         # Begin by collecting the ante from all clients
-        await self.collect_ante()
-        # Then deal hole cards
-        await self.deal_hands()
-        # Continue with game logic 
-        
-    async def collect_ante(self):
-        ''' Collect the ante from each client '''
         await self.broadcast({"action": "collect_ante", "amount": self.ante})
+        # Then, wait for all ante's to be collected by using a non-blocking task
+        asyncio.create_task(self.wait_for_antes())  
         
+        
+    async def wait_for_antes(self):
+        ''' Separate task to wait for all antes to be collected '''
+        await self.ante_event.wait()  # Wait until all players have placed their ante
+        
+        # Now deal hole cards after all antes are collected
+        await self.deal_hands()
+        
+
     async def deal_hands(self):
+        ''' Deals hole cards to each player '''
         for player in self.players:
             player.hand = [self.deck.pop(), self.deck.pop()]
             await self.send_message(player, {"hand": player.hand})

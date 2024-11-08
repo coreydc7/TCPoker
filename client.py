@@ -89,7 +89,7 @@ class TCPokerClient:
         elif "action" in message:
             if message["action"] == "collect_ante":
                 print(f"\nYou must bet the ante ({message['amount']}) to participate in this hand.")
-                self.valid_commands = ['bet']
+                self.valid_commands = ['ante']
                 # await asyncio.sleep(0.1)
                 self.refresh_prompt_event.set()       # Refresh the prompt with new valid_commands
                 
@@ -108,9 +108,10 @@ class TCPokerClient:
         
         cmd = cmd_parts[0].lower()
         if cmd in self.valid_commands:
-            if cmd.startswith("bet"):   # Certain commands must contain two parts, such as "bet 100"
+            if cmd.startswith("ante"):   # Certain commands must contain two parts, such as "bet 100"
                 if len(cmd_parts) != 2 or not cmd_parts[1].isdigit():
-                    print("Usage: bet <amount>")
+                    print("Usage: ante <amount>")
+                    self.refresh_prompt_event.set()
                     return
                 await self.send_message({"command": cmd_parts})
             else:
@@ -122,6 +123,7 @@ class TCPokerClient:
                 await self.writer.wait_closed()
         else:
             print(f"Unknown command entered: {cmd}")
+            self.refresh_prompt_event.set()
             
 
     async def input_loop(self):
