@@ -2,7 +2,6 @@ import asyncio
 import json
 import logging
 import argparse
-from typing import List
 
 logging.basicConfig(
     # Configure logging
@@ -141,15 +140,14 @@ class TCPokerServer:
 
 async def main():
     parser = argparse.ArgumentParser(description="TCPoker Server")
-    parser.add_argument('-i', '--ip', type=str, required=True, help='Host IP Address.')
     parser.add_argument('-p', '--port', type=int, required=True, help='Port to listen on.')
     args = parser.parse_args() 
     
     poker_server = TCPokerServer()
     
     # Start TCP server
-    server = await asyncio.start_server(poker_server.handle_client, args.ip, args.port)
-    addr = (args.ip, args.port)
+    server = await asyncio.start_server(poker_server.handle_client, '0.0.0.0', args.port)
+    addr = ('0.0.0.0', args.port)
     logging.info(f"Server listening on {addr}")
     print(f"Server listening on {addr}")
     
