@@ -2,6 +2,7 @@ import asyncio
 import json
 import logging
 import argparse
+import random
 
 logging.basicConfig(
     # Configure logging
@@ -22,10 +23,11 @@ class Player:
 
 class TCPokerServer:
     ''' Manages state of the Poker Game '''
-    def __init__(self):
+    def __init__(self, seed=None):
         self.players = []
         self.pot = 0
         self.ante = 10
+        self.random = random.Random(seed)
         self.deck = self.create_deck()
         self.ante_event = asyncio.Event()
         
@@ -38,7 +40,9 @@ class TCPokerServer:
     def create_deck(self):
         suits = ['♠', '♥', '♦', '♣']
         ranks = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A']
-        return [f"{rank}{suit}" for suit in suits for rank in ranks]
+        deck = [f"{rank}{suit}" for suit in suits for rank in ranks]
+        self.random.shuffle(deck)
+        return deck
 
     async def handle_client(self, reader, writer):
         ''' Main client event handler '''
