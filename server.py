@@ -24,12 +24,21 @@ class Player:
 class TCPokerServer:
     ''' Manages state of the Poker Game '''
     def __init__(self, seed=None):
+        self.game_active = False
         self.players = []
         self.pot = 0
         self.ante = 10
         self.random = random.Random(seed)
         self.deck = self.create_deck()
         self.ante_event = asyncio.Event()
+        
+        
+    def cleanup(self):
+        logging.info("Cleaning up game state...")
+        self.game_active = False
+        self.pot = 0
+        self.deck = self.create_deck()
+        self.ante_event.clear()
         
     def check_all_ante(self):
         if all(player.ante_placed for player in self.players):
@@ -79,6 +88,15 @@ class TCPokerServer:
             logging.info(f"Connection closed for {addr}")
             self.players.remove(player)
             await self.broadcast({"broadcast": f"{player.name} has left the game."})
+            if(self.game_active):
+                print("Ending current game and disconnecting clients...")
+                await self.broadcast({"broadcast": "Ending current game and disconnecting clients..."})
+                for player in self.players:
+                    player.writer.close()
+                    await player.writer.wait_closed()
+                self.players = []
+                self.cleanup()
+    
             writer.close()
             await writer.wait_closed()
 
@@ -118,6 +136,7 @@ class TCPokerServer:
     async def check_all_ready(self):
         ''' Check if all clients are ready to start the game '''
         if len(self.players) == 2 and all(p.ready for p in self.players):
+            self.game_active = True
             await self.broadcast({"start_game": True})      # Notify clients that game has started
             asyncio.create_task(self.start_game())
 
