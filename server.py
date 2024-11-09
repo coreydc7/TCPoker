@@ -115,22 +115,17 @@ class TCPokerServer:
         ''' Check if all clients are ready to start the game '''
         if len(self.players) == 2 and all(p.ready for p in self.players):
             await self.broadcast({"start_game": True})      # Notify clients that game has started
-            await self.start_game()
+            asyncio.create_task(self.start_game())
 
     async def start_game(self):
         ''' Main Poker game flow'''
         await self.broadcast({"broadcast": "All players are ready. Starting the game!"})
         # Begin by collecting the ante from all clients
         await self.broadcast({"action": "collect_ante", "amount": self.ante})
-        # Then, wait for all ante's to be collected by using a non-blocking task
-        asyncio.create_task(self.wait_for_antes())  
+        # Then, wait for all ante's to be collected 
+        await self.ante_event.wait() 
         
-        
-    async def wait_for_antes(self):
-        ''' Separate task to wait for all antes to be collected '''
-        await self.ante_event.wait()  # Wait until all players have placed their ante
-        
-        # Now deal hole cards after all antes are collected
+        # Then, deal hole cards after all antes are collected
         await self.deal_hands()
         
 
