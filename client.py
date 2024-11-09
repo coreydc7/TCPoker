@@ -2,6 +2,7 @@ import asyncio
 import json
 import logging
 import argparse
+import sys
 from prompt_toolkit import PromptSession
 from prompt_toolkit.patch_stdout import patch_stdout
 
@@ -63,6 +64,8 @@ class TCPokerClient:
                 if not data:
                     logging.info("Server closed the connection.")
                     print("Disconnected from server.")
+                    await asyncio.sleep(1)
+                    sys.exit(1)
                     break
                 message = json.loads(data.decode())
                 logging.info(f"{self.username} received message: {message}")
@@ -80,6 +83,7 @@ class TCPokerClient:
             print("\nPlayer Status:")
             for name, ready in status.items():
                 print(f"{name}: {'Ready' if ready else 'Not Ready'}")
+            self.refresh_prompt_event.set()
         elif "hand" in message:
             print(f"\nYour hand: {', '.join(message['hand'])}")
         elif "error" in message:
@@ -98,7 +102,7 @@ class TCPokerClient:
         ''' Prompts the user for input '''
         command = await self.session.prompt_async(f"Enter a command {self.valid_commands}: ")
         await self.process_command(command)
-        
+    
         
     async def process_command(self, command):
         ''' Process the user's command '''
