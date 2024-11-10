@@ -26,7 +26,7 @@ class TCPokerClient:
         self.session = PromptSession()
         self.valid_commands = ['ready', 'status', 'exit']
         self.game_started = False
-        self.refresh_prompt_event = asyncio.Event()    # This event signals for a client prompt refresh
+        self.refresh_prompt_event = asyncio.Event() 
         
         
     async def connect(self):
@@ -62,6 +62,7 @@ class TCPokerClient:
             while True:
                 data = await self.reader.readline()
                 if not data:
+                    # If the server exits
                     logging.info("Server closed the connection.")
                     print("Disconnected from server.")
                     await asyncio.sleep(1)
@@ -83,7 +84,6 @@ class TCPokerClient:
             print("\nPlayer Status:")
             for name, ready in status.items():
                 print(f"{name}: {'Ready' if ready else 'Not Ready'}")
-            self.refresh_prompt_event.set()
         elif "hand" in message:
             print(f"\nYour hand: {', '.join(message['hand'])}")
         elif "error" in message:
@@ -94,9 +94,16 @@ class TCPokerClient:
             if message["action"] == "collect_ante":
                 print(f"\nYou must bet the ante ({message['amount']}) to participate in this hand.")
                 self.valid_commands = ['ante']
-                # await asyncio.sleep(0.1)
-                self.refresh_prompt_event.set()       # Refresh the prompt with new valid_commands
+        elif "game_state" in message:
+            if message["game_state"] == "lobby":
+                print("Returning to lobby...")
+                self.game_started = False
+                self.valid_commands = ['ready', 'status', 'exit']
                 
+        # Update and refresh the prompt message
+        self.session.message = f"Enter a command {self.valid_commands}: "
+        self.session.app.invalidate()   
+        self.refresh_prompt_event.set()       
                 
     async def prompt_user(self):
         ''' Prompts the user for input '''
@@ -131,7 +138,7 @@ class TCPokerClient:
             
 
     async def input_loop(self):
-        ''' Main clients input loop '''
+        ''' Client input loop task '''
         with patch_stdout():
             while True:
                 await self.refresh_prompt_event.wait()

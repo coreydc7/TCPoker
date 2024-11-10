@@ -31,14 +31,21 @@ class TCPokerServer:
         self.random = random.Random(seed)
         self.deck = self.create_deck()
         self.ante_event = asyncio.Event()
+        self.game_task = None
         
         
     def cleanup(self):
+        ''' Cleans up server state if a game in-progress is cancelled '''
         logging.info("Cleaning up game state...")
         self.game_active = False
+        if self.game_task:
+            self.game_task.cancel()
+            self.game_task = None
         self.pot = 0
         self.deck = self.create_deck()
         self.ante_event.clear()
+        for player in self.players:
+            player.hand = []
         
     def check_all_ante(self):
         if all(player.ante_placed for player in self.players):
@@ -47,6 +54,7 @@ class TCPokerServer:
             self.ante_event.clear()
 
     def create_deck(self):
+        ''' Create and shuffle a deck '''
         suits = ['♠', '♥', '♦', '♣']
         ranks = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A']
         deck = [f"{rank}{suit}" for suit in suits for rank in ranks]
@@ -54,7 +62,7 @@ class TCPokerServer:
         return deck
 
     async def handle_client(self, reader, writer):
-        ''' Main client event handler '''
+        ''' Main client event handler. Each time a client connects, this couroutine is started '''
         addr = writer.get_extra_info('peername')
         print(f"Accepted new connection from {addr}")
         logging.info(f"Accepted new connection from {addr}")
@@ -88,20 +96,19 @@ class TCPokerServer:
             logging.info(f"Connection closed for {addr}")
             self.players.remove(player)
             await self.broadcast({"broadcast": f"{player.name} has left the game."})
-            if(self.game_active):
-                print("Ending current game and disconnecting clients...")
-                await self.broadcast({"broadcast": "Ending current game and disconnecting clients..."})
-                for player in self.players:
-                    player.writer.close()
-                    await player.writer.wait_closed()
-                self.players = []
+            # When a client disconnects while a game is in progress, cancel the game and return the other client to lobby. 
+            # TODO: implement saving of player state, so players who disconnect can rejoin using their username
+            if(self.game_active):   
+                print("Ending current game...")
+                await self.broadcast({"broadcast": "Ending current game..."})
+                await self.broadcast({"game_state": "lobby"})
                 self.cleanup()
     
             writer.close()
             await writer.wait_closed()
 
     async def process_message(self, player, message):
-        ''' Processes any commands received after username stage '''
+        ''' Processes any commands received after username stage. The list of commands a client is allowed to send is managed by the client'''
         if "command" in message:
             command = message["command"][0]
             if command == "ready":
@@ -114,7 +121,7 @@ class TCPokerServer:
                 await self.send_message(player, {"status": status})
             elif command == "exit":
                 return
-            elif command.startswith("ante"):
+            elif command.startswith("ante"):    # Usage: ante <amount>
                 amount = int(message["command"][1]) if len(message["command"]) > 1 else 0
                 if amount <= player.stack:
                     self.pot += amount
@@ -138,7 +145,7 @@ class TCPokerServer:
         if len(self.players) == 2 and all(p.ready for p in self.players):
             self.game_active = True
             await self.broadcast({"start_game": True})      # Notify clients that game has started
-            asyncio.create_task(self.start_game())
+            self.game_task = asyncio.create_task(self.start_game())
 
     async def start_game(self):
         ''' Main Poker game flow'''
@@ -147,7 +154,6 @@ class TCPokerServer:
         await self.broadcast({"action": "collect_ante", "amount": self.ante})
         # Then, wait for all ante's to be collected 
         await self.ante_event.wait() 
-        
         # Then, deal hole cards after all antes are collected
         await self.deal_hands()
         
