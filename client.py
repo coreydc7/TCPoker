@@ -85,7 +85,8 @@ class TCPokerClient:
             for name, ready in status.items():
                 print(f"{name}: {'Ready' if ready else 'Not Ready'}")
         elif "hand" in message:
-            print(f"\nYour hand: {', '.join(message['hand'])}")
+            print(f"\nYour hand: ")
+            await self.print_cards(message['hand'])
         elif "error" in message:
             print(f"\nError: {message['error']}")
         elif "start_game" in message:
@@ -96,7 +97,7 @@ class TCPokerClient:
                 self.valid_commands = ['ante']
         elif "game_state" in message:
             if message["game_state"] == "lobby":
-                print("Returning to lobby...")
+                print("\nReturning to lobby...")
                 self.game_started = False
                 self.valid_commands = ['ready', 'status', 'exit']
                 
@@ -144,17 +145,47 @@ class TCPokerClient:
                 await self.refresh_prompt_event.wait()
                 self.refresh_prompt_event.clear()
                 await self.prompt_user()
-               
+
+    async def print_cards(self, cards):
+        ''' Creates ASCII art for cards '''
+        card_template = [
+            ' ___ ',
+            '|{} |',
+            '| {} |',
+            '|_{}|'
+        ]
+
+        formatted_cards = []
+        for card in cards:
+            rank = card[0]
+            suit = card[1]
+            # pad single digit ranks 
+            rank_top = f'{rank} ' if len(rank) == 1 else rank
+            rank_bot = f'_{rank}' if len(rank) == 1 else rank  
+            formatted_cards.append((rank_top, suit, rank_bot))
+
+        # Print each row for all cards
+        for row_idx in range(len(card_template)):
+            for card in formatted_cards:
+                if row_idx == 0:
+                    print(card_template[row_idx], end=' ')
+                elif row_idx == 1:
+                    print(card_template[row_idx].format(card[0]), end=' ')
+                elif row_idx == 2:
+                    print(card_template[row_idx].format(card[1]), end=' ')
+                else:
+                    print(card_template[row_idx].format(card[2]), end=' ') 
+            print()
 
 if __name__ == "__main__":
+    username = input("Enter your username: ")
     parser = argparse.ArgumentParser(description="TCP Poker Client")
     parser.add_argument('-i', '--ip', type=str, required=True, help='Server IP Address.')
     parser.add_argument('-p', '--port', type=int, required=True, help='Server Port.')
-    parser.add_argument('-u', '--username', type=str, required=True, help='Your username.')
 
     args = parser.parse_args()
 
-    client = TCPokerClient(args.ip, args.port, args.username)
+    client = TCPokerClient(args.ip, args.port, username)
     try:
         asyncio.run(client.connect())
     except KeyboardInterrupt:
