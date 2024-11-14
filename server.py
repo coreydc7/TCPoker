@@ -162,10 +162,8 @@ class TCPokerServer:
             elif command in ['check', 'bet', 'call', 'raise', 'fold']:
                 if player == self.current_player:
                     amount = int(message["command"][1]) if len(message["command"]) > 1 else 0
-                    if self.handle_betting_action(player, command, amount):
-                        self.current_player_event.set()
-                        logging.info(f"{player.name} has {command} ${amount}. Pot: ${self.pot}")
-                        await self.broadcast({"broadcast": f"{player.name} has {command} ${amount}. Pot: ${self.pot}"})
+                    if await self.handle_betting_action(player, command, amount):
+                        self.current_player_event.set()     # Set event to Move to next players turn
                     else:
                         await self.send_message(player, {"error": "Invalid betting action"})
                 else:
@@ -188,28 +186,61 @@ class TCPokerServer:
         ''' Main Poker game flow'''
         await self.broadcast({"broadcast": "All players are ready. Starting the game!"})
         # 1. Collect the ante from both clients. Clients must post the ante to buy into the hand. 
+        for player in self.players:
+            await self.send_message(player, {"stack": player.stack})
         await self.broadcast({"action": "collect_ante", "amount": self.ante})
         # 2. Wait for the antes to be collected
         await self.ante_event.wait() 
         # 3. Deal hole cards, and show them to the client (pre-flop)
         await self.deal_hands()
         # 4. Begin the first betting round 
+        await self.show_hands()
         await self.broadcast({"broadcast": "Beginning first betting round..."})
         await self.betting_round()
-        # 5. Wait for the betting round to complete
+        # 5. Wait for the first betting round to complete
         await self.betting_round_event.wait()
         # 6. Deal three community cards (Flop)
         await self.broadcast({"broadcast": "Dealing community cards..."})
         await self.deal_community_cards(3)
+        # 7. Begin the second betting round
+        await self.show_hands()
+        await self.broadcast({"broadcast": "Beginning second betting round..."})
+        await self.betting_round()
+        # 8. Wait for the second betting round to complete
+        await self.betting_round_event.wait()
+        # 9. Deal one community card (Turn)
+        await self.deal_community_cards(1)
+        # 10. Begin the third betting round
+        await self.show_hands()
+        await self.broadcast({"broadcast": "Beginning third betting round..."})
+        await self.betting_round()
+        # 11. Wait for the third betting round to complete
+        await self.betting_round_event.wait()
+        # 12. Deal final community card (River)
+        await self.deal_community_cards(1)
+        # 13. Begin the final betting round
+        await self.show_hands()
+        await self.broadcast({"broadcast": "Beginning final betting round..."})
+        await self.betting_round()
+        # 14. Wait for the final betting round to complete
+        await self.betting_round_event.wait()
+        # DEBUG
+        print("\nFinished final betting round!")
+
 
     async def deal_hands(self):
         ''' Deals hole cards to each player '''
         for player in self.players:
             player.hand = [self.deck.pop(), self.deck.pop()]
-            await self.send_message(player, {"hand": player.hand})
             logging.info(f"Dealt to {player.name}: {player.hand}")
 
-    
+    async def show_hands(self):
+        ''' Sends each players hand and stack as a message for the client to display '''
+        for player in self.players:
+            await self.send_message(player, {"hand": player.hand})
+            await self.send_message(player, {"stack": player.stack})
+            
+
     async def betting_round(self):
         ''' Manages betting round '''
         self.current_bet = 0
@@ -310,10 +341,12 @@ class TCPokerServer:
             return ['call', 'fold']
             
 
-    def handle_betting_action(self, player, action, amount):
+    async def handle_betting_action(self, player, action, amount):
         ''' Handle betting round actions '''
         if action == 'check' and self.current_bet == 0:
             player.last_action = 'check'
+            await self.broadcast({"broadcast": f"{player.name} has checked. Pot: ${self.pot}"})
+            logging.info(f"{player.name} has checked. Pot: ${self.pot}")
             return True
         elif action == 'bet' and self.current_bet == 0:
             if amount >= self.ante and amount <= player.stack:
@@ -323,6 +356,8 @@ class TCPokerServer:
                 player.stack -= amount
                 player.last_action = 'bet'
                 self.last_bettor = player
+                await self.broadcast({"broadcast": f"{player.name} has bet ${amount}. Pot: ${self.pot}"})
+                logging.info(f"{player.name} has bet ${amount}. Pot: ${self.pot}")
                 return True
         elif action == 'call' and self.current_bet > 0:
             to_call = self.current_bet - self.pot_committed[player]
@@ -331,6 +366,8 @@ class TCPokerServer:
                 self.pot_committed[player] = self.current_bet
                 player.stack -= to_call
                 player.last_action = 'call'
+                await self.broadcast({"broadcast": f"{player.name} has called ${to_call}. Pot: ${self.pot}"})
+                logging.info(f"{player.name} has called ${to_call}. Pot: ${self.pot}")
                 return True
         elif action == 'raise':
             if amount >= self.current_bet * 2 and amount <= player.stack:
@@ -341,9 +378,11 @@ class TCPokerServer:
                 player.stack -= to_add
                 player.last_action = 'raise'
                 self.last_bettor = player
+                await self.broadcast({"broadcast": f"{player.name} has raised to ${to_add}. Pot: ${self.pot}"})
+                logging.info(f"{player.name} has raised to ${to_add}. Pot: ${self.pot}")
                 return True
         elif action == 'fold':
-            # TODO: implement fold logic
+            # TODO: implement fold logic once determining a winner has been implemented
             player.folded = True
             player.last_action = 'fold'
             return True

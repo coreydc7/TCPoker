@@ -90,6 +90,9 @@ class TCPokerClient:
             print(f"\nYour hand: ")
             await self.print_cards(message['hand'])
 
+        elif "stack" in message:
+            print(f"\n You have: ${message['stack']}")
+
         elif "error" in message:
             print(f"\nError: {message['error']}")
 
