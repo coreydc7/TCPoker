@@ -95,6 +95,10 @@ class TCPokerClient:
             if message["action"] == "collect_ante":
                 print(f"\nYou must bet the ante ({message['amount']}) to participate in this hand.")
                 self.valid_commands = ['ante']
+            elif message["action"] == "collect_bets":
+                print(f"It's your turn!\nThe pot is ${message['pot']}\nThe current bet is ${message['current_bet']}")
+                self.valid_commands = message["valid_actions"]
+
         elif "game_state" in message:
             if message["game_state"] == "lobby":
                 print("\nReturning to lobby...")
