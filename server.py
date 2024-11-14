@@ -244,7 +244,7 @@ class TCPokerServer:
         await self.current_player_event.wait()
 
     
-    def should_end_round(self, player):
+    def should_end_round(self, current_player):
         ''' Determine if betting round should end 
             A round should end if:
             1. All players but one have folded
@@ -264,8 +264,10 @@ class TCPokerServer:
         # If there's been betting action
         if self.last_bettor:
             # Check we've gone back to the last bettor and all players have matched
-            all_matched = all(self.pot_committed[p] == self.current_bet for p in active_players)
-            return all_matched
+            is_last_bettor = current_player == self.last_bettor
+            all_bets_matched = all(self.pot_committed[p] == self.current_bet for p in active_players)
+            return is_last_bettor and all_bets_matched
+
         return False
     
     def get_valid_actions(self, player):
