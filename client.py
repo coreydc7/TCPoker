@@ -79,18 +79,23 @@ class TCPokerClient:
         ''' Handles any received messages '''
         if "broadcast" in message:
             print(f"\n{message['broadcast']}")
+
         elif "status" in message:
             status = message['status']
             print("\nPlayer Status:")
             for name, ready in status.items():
                 print(f"{name}: {'Ready' if ready else 'Not Ready'}")
+
         elif "hand" in message:
             print(f"\nYour hand: ")
             await self.print_cards(message['hand'])
+
         elif "error" in message:
             print(f"\nError: {message['error']}")
+
         elif "start_game" in message:
             self.game_started = True
+
         elif "action" in message:
             if message["action"] == "collect_ante":
                 print(f"\nYou must bet the ante ({message['amount']}) to participate in this hand.")
@@ -104,12 +109,17 @@ class TCPokerClient:
                 print("\nReturning to lobby...")
                 self.game_started = False
                 self.valid_commands = ['ready', 'status', 'exit']
+        
+        elif "community_cards" in message:
+            print(f"\nCommunity cards: ")
+            await self.print_cards(message['community_cards'])
                 
         # Update and refresh the prompt message
         self.session.message = f"Enter a command {self.valid_commands}: "
         self.session.app.invalidate()   
         self.refresh_prompt_event.set()       
                 
+
     async def prompt_user(self):
         ''' Prompts the user for input '''
         command = await self.session.prompt_async(f"Enter a command {self.valid_commands}: ")
@@ -150,6 +160,7 @@ class TCPokerClient:
                 self.refresh_prompt_event.clear()
                 await self.prompt_user()
 
+
     async def print_cards(self, cards):
         ''' Creates ASCII art for cards '''
         card_template = [
@@ -180,6 +191,8 @@ class TCPokerClient:
                 else:
                     print(card_template[row_idx].format(card[2]), end=' ') 
             print()
+
+
 
 if __name__ == "__main__":
     username = input("Enter your username: ")

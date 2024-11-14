@@ -36,29 +36,37 @@ class TCPokerServer:
         self.ante = 10
         self.random = random.Random(seed)
         self.deck = self.create_deck()
-        self.ante_event = asyncio.Event()   # Signals when all antes are collected
+        self.community_cards = []
         self.game_task = None
-        self.current_player_event = asyncio.Event()     # Signals when current players turn is over
         self.current_player = None
         self.current_bet = 0
         self.pot_committed = {}     # How much each player has bet during each round
         self.round_complete = False
         self.last_bettor = None
-
+        self.ante_event = asyncio.Event()   # Signals when all antes are collected
+        self.current_player_event = asyncio.Event()     # Signals when current players turn is over
+        self.betting_round_event = asyncio.Event()  # Signals when the betting round is complete
         
     def cleanup(self):
         ''' Cleans up server state if a game in-progress is cancelled '''
         logging.info("Cleaning up game state...")
         self.game_active = False
+        for player in self.players:
+            player.hand = []
         if self.game_task:
             self.game_task.cancel()
             self.game_task = None
         self.pot = 0
         self.deck = self.create_deck()
+        self.community_cards = []
+        self.current_player = None
+        self.current_bet = 0
+        self.pot_committed = {}
+        self.round_complete = False
+        self.last_bettor = None
         self.ante_event.clear()
-        for player in self.players:
-            player.hand = []
-        
+        self.current_player_event.clear()
+        self.betting_round_event.clear()
 
     def check_all_ante(self):
         if all(player.ante_placed for player in self.players):
@@ -179,16 +187,20 @@ class TCPokerServer:
     async def start_game(self):
         ''' Main Poker game flow'''
         await self.broadcast({"broadcast": "All players are ready. Starting the game!"})
-        # Begin by collecting the ante from all clients
+        # 1. Collect the ante from both clients. Clients must post the ante to buy into the hand. 
         await self.broadcast({"action": "collect_ante", "amount": self.ante})
-        # Then, wait for all ante's to be collected 
+        # 2. Wait for the antes to be collected
         await self.ante_event.wait() 
-        # Then, deal hole cards after all antes are collected
+        # 3. Deal hole cards, and show them to the client (pre-flop)
         await self.deal_hands()
-
+        # 4. Begin the first betting round 
         await self.broadcast({"broadcast": "Beginning first betting round..."})
         await self.betting_round()
-        
+        # 5. Wait for the betting round to complete
+        await self.betting_round_event.wait()
+        # 6. Deal three community cards (Flop)
+        await self.broadcast({"broadcast": "Dealing community cards..."})
+        await self.deal_community_cards(3)
 
     async def deal_hands(self):
         ''' Deals hole cards to each player '''
@@ -203,6 +215,7 @@ class TCPokerServer:
         self.current_bet = 0
         self.pot_committed = {player: 0 for player in self.players}
         self.round_complete = False
+        self.betting_round_event.clear()
         for p in self.players:
             p.last_action = None
         self.last_bettor = None
@@ -221,8 +234,9 @@ class TCPokerServer:
         
         # Check if round should end before each turn
         if self.should_end_round(player):
-            self.round_complete = True
             await self.broadcast({"broadcast": f"Betting round complete. Pot is ${self.pot}"})
+            self.round_complete = True
+            self.betting_round_event.set()
             return
         
         self.current_player = player
@@ -249,7 +263,7 @@ class TCPokerServer:
             A round should end if:
             1. All players but one have folded
             2. All players check, no one bets
-            3. All active players have acted and their bet amounts are equal.
+            3. If betting action occurs, all active players must bet and their bet amounts must be equal.
         '''
         active_players = [p for p in self.players if not p.folded]
 
@@ -269,6 +283,15 @@ class TCPokerServer:
             return is_last_bettor and all_bets_matched
 
         return False
+    
+    
+    async def deal_community_cards(self, num_cards):
+        ''' Pop num_cards cards from the deck and add to community cards
+            Display community cards to the clients '''
+        for _ in range(num_cards):
+            self.community_cards.append(self.deck.pop())
+        await self.broadcast({"community_cards": self.community_cards})
+        logging.info(f"Dealt community cards: {self.community_cards}")
     
     def get_valid_actions(self, player):
         ''' Determine valid actions for player '''
