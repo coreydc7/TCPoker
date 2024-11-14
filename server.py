@@ -43,9 +43,11 @@ class TCPokerServer:
         self.pot_committed = {}     # How much each player has bet during each round
         self.round_complete = False
         self.last_bettor = None
+        self.best_hands = {player: None for player in self.players}
         self.ante_event = asyncio.Event()   # Signals when all antes are collected
         self.current_player_event = asyncio.Event()     # Signals when current players turn is over
         self.betting_round_event = asyncio.Event()  # Signals when the betting round is complete
+        self.best_hands_event = asyncio.Event()     # Signals when both players have sent in their best hands
         
     def cleanup(self):
         ''' Cleans up server state if a game in-progress is cancelled '''
@@ -64,9 +66,11 @@ class TCPokerServer:
         self.pot_committed = {}
         self.round_complete = False
         self.last_bettor = None
+        self.best_hands = {player: None for player in self.players}
         self.ante_event.clear()
         self.current_player_event.clear()
         self.betting_round_event.clear()
+        self.best_hands_event.clear()
 
     def check_all_ante(self):
         if all(player.ante_placed for player in self.players):
@@ -135,41 +139,61 @@ class TCPokerServer:
         ''' Processes any commands received after username stage. The list of commands a client is allowed to send is managed by the client'''
         if "command" in message:
             command = message["command"][0]
+
             if command == "ready":
                 player.ready = True
                 await self.broadcast({"broadcast": f"{player.name} is ready."})
                 logging.info(f"{player.name} is ready.")
                 await self.check_all_ready()        # After a player readies up, check if all clients are ready
+            
             elif command == "status":
                 status = {p.name: p.ready for p in self.players}
                 await self.send_message(player, {"status": status})
+            
             elif command == "exit":
                 return
+            
             elif command.startswith("ante"):    # Usage: ante <amount>
                 amount = int(message["command"][1]) if len(message["command"]) > 1 else 0
+                
                 if amount <= player.stack:
                     self.pot += amount
                     player.stack -= amount
+                    
                     if not player.ante_placed:
                         player.ante_placed = True
                         self.check_all_ante()
+                        
                         if not self.ante_event.is_set():
                             await self.send_message(player, {"broadcast": "Waiting for all players to place their ante..."})
                     await self.broadcast({"broadcast": f"{player.name} bets ${amount}. Pot is now ${self.pot}."})
                     logging.info(f"{player.name} bets ${amount}. Pot: ${self.pot}")
+                
                 else:
                     await self.send_message(player, {"error": "Bet amount exceeds stack."})
+            
             elif command in ['check', 'bet', 'call', 'raise', 'fold']:
                 if player == self.current_player:
                     amount = int(message["command"][1]) if len(message["command"]) > 1 else 0
+                    
                     if await self.handle_betting_action(player, command, amount):
                         self.current_player_event.set()     # Set event to Move to next players turn
+                    
                     else:
                         await self.send_message(player, {"error": "Invalid betting action"})
+                
                 else:
                     await self.send_message(player, {"error": "Please wait your turn"})
+            
+            elif command == "hand":
+                poker_hand = self.parse_hand(player, command)
+                self.best_hands[player] = poker_hand
+                if(self.best_hands[p] != None for p in self.players): # All players have submitted a best hand
+                    self.best_hands_event.set()
+           
             else:
                 await self.send_message(player, {"error": "Unknown command."})
+        
         else:
             await self.send_message(player, {"error": "Invalid message format."})
 
@@ -224,8 +248,13 @@ class TCPokerServer:
         await self.betting_round()
         # 14. Wait for the final betting round to complete
         await self.betting_round_event.wait()
-        # DEBUG
-        print("\nFinished final betting round!")
+        # 15. Have each client assemble their own best 5-card poker hand
+        await self.broadcast({"action": "collect_hands"})
+        # 16. Wait for both clients to send in their hands
+        await self.best_hands_event.wait()
+        # 17. Determine who wins the pot based on who has the best poker hand
+        print("\nBest hands are in!")     # DEBUG
+        await self.determine_winner()
 
 
     async def deal_hands(self):
@@ -388,7 +417,22 @@ class TCPokerServer:
             return True
         
         return False
+    
+    def parse_hand(self, player, command):
+        ''' Parses the hand command containing a clients best poker hand'''
+        cards = command.split()[1:]
+        selected_cards = []
 
+        for card in cards:
+            card_type = card[0]
+            pos = int(card[1]) - 1
+
+            if card_type == 'c':
+                selected_cards.append(self.community_cards[pos])
+            else:
+                selected_cards.append(player.hand[pos])
+
+        return selected_cards
 
     async def broadcast(self, message):
         ''' Send a message to all players '''
@@ -405,7 +449,11 @@ class TCPokerServer:
         except Exception as e:
             logging.error(f"Failed to send message to {player.name}: {e}")
 
-
+    
+    async def determine_winner(self):
+        ''' Once the all players have submitted their best 5-card poker hands in self.best_hands, 
+            Evaluate the winner of the pot and send results. Cleanup state and move onto the next round'''
+        pass
 
 
 async def main():

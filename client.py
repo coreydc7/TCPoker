@@ -103,9 +103,14 @@ class TCPokerClient:
             if message["action"] == "collect_ante":
                 print(f"\nYou must bet the ante ({message['amount']}) to participate in this hand.")
                 self.valid_commands = ['ante']
+
             elif message["action"] == "collect_bets":
                 print(f"It's your turn!\nThe pot is ${message['pot']}\nThe current bet is ${message['current_bet']}")
                 self.valid_commands = message["valid_actions"]
+
+            elif message["action"] == "collect_hands":
+                print(f"\nTime to send your best 5-card Poker hand!\nChoose 5 cards from your hand (h1, h2) and the community cards (c1, c2, c3, c4, c5)\nExample command format: hand c1 c2 c3 h1 h2")
+                self.valid_commands = ['hand']
 
         elif "game_state" in message:
             if message["game_state"] == "lobby":
@@ -132,17 +137,26 @@ class TCPokerClient:
     async def process_command(self, command):
         ''' Process the user's command '''
         cmd_parts = command.strip().split()
-        if not cmd_parts:
-            return
-        
         cmd = cmd_parts[0].lower()
+        
         if cmd in self.valid_commands:
+            
             if cmd.startswith("ante"):   # Certain commands must contain two parts, such as "bet 100"
+                
                 if len(cmd_parts) != 2 or not cmd_parts[1].isdigit():
                     print("Usage: ante <amount>")
                     self.refresh_prompt_event.set()
                     return
                 await self.send_message({"command": cmd_parts})
+            
+            elif cmd.startswith("hand"):
+
+                if len(cmd_parts) != 6:
+                    print(f"Choose 5 cards. Community cards (c1-c5). Hole cards (h1-h2).\nExample command: hand c1 c2 c3 h1 h2")
+                    self.refresh_prompt_event.set()
+                    return
+                await self.send_message({"command": cmd_parts})
+            
             else:
                 await self.send_message({"command": cmd_parts})
                 
@@ -150,6 +164,7 @@ class TCPokerClient:
                 print("Exiting game.")
                 self.writer.close()
                 await self.writer.wait_closed()
+        
         else:
             print(f"Unknown command entered: {cmd}")
             self.refresh_prompt_event.set()
