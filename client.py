@@ -193,8 +193,8 @@ class TCPokerClient:
             rank = card[0]
             suit = card[1]
             # pad single digit ranks 
-            rank_top = f'{rank} ' if len(rank) == 1 else rank
-            rank_bot = f'_{rank}' if len(rank) == 1 else rank  
+            rank_top = f'{rank} '
+            rank_bot = f'_{rank}' 
             formatted_cards.append((rank_top, suit, rank_bot))
 
         # Print each row for all cards

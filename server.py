@@ -3,6 +3,7 @@ import json
 import logging
 import argparse
 import random
+from collections import Counter
 
 logging.basicConfig(
     # Configure logging
@@ -22,6 +23,7 @@ class Player:
         self.stack = stack  
         self.hand = []
         self.ante_placed = False
+        self.hand_placed = False
         self.last_action = None
         self.folded = False
 
@@ -43,7 +45,7 @@ class TCPokerServer:
         self.pot_committed = {}     # How much each player has bet during each round
         self.round_complete = False
         self.last_bettor = None
-        self.best_hands = {player: None for player in self.players}
+        self.best_hands = {}
         self.ante_event = asyncio.Event()   # Signals when all antes are collected
         self.current_player_event = asyncio.Event()     # Signals when current players turn is over
         self.betting_round_event = asyncio.Event()  # Signals when the betting round is complete
@@ -66,7 +68,7 @@ class TCPokerServer:
         self.pot_committed = {}
         self.round_complete = False
         self.last_bettor = None
-        self.best_hands = {player: None for player in self.players}
+        self.best_hands = {}
         self.ante_event.clear()
         self.current_player_event.clear()
         self.betting_round_event.clear()
@@ -78,11 +80,17 @@ class TCPokerServer:
         else:
             self.ante_event.clear()
 
+    def check_all_hands(self):
+        if all(player.hand_placed for player in self.players):
+            self.best_hands_event.set()
+        else:
+            self.best_hands_event.clear()
+
 
     def create_deck(self):
         ''' Create and shuffle a deck '''
         suits = ['♠', '♥', '♦', '♣']
-        ranks = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A']
+        ranks = ['2', '3', '4', '5', '6', '7', '8', '9', 'T', 'J', 'Q', 'K', 'A']
         deck = [f"{rank}{suit}" for suit in suits for rank in ranks]
         self.random.shuffle(deck)
         return deck
@@ -186,11 +194,11 @@ class TCPokerServer:
                     await self.send_message(player, {"error": "Please wait your turn"})
             
             elif command == "hand":
-                poker_hand = self.parse_hand(player, command)
+                poker_hand = self.parse_hand(player, message["command"])
                 self.best_hands[player] = poker_hand
-                if(self.best_hands[p] != None for p in self.players): # All players have submitted a best hand
-                    self.best_hands_event.set()
-           
+                player.hand_placed = True
+                self.check_all_hands()  # Check if all best hands are in
+
             else:
                 await self.send_message(player, {"error": "Unknown command."})
         
@@ -253,7 +261,6 @@ class TCPokerServer:
         # 16. Wait for both clients to send in their hands
         await self.best_hands_event.wait()
         # 17. Determine who wins the pot based on who has the best poker hand
-        print("\nBest hands are in!")     # DEBUG
         await self.determine_winner()
 
 
@@ -418,9 +425,9 @@ class TCPokerServer:
         
         return False
     
-    def parse_hand(self, player, command):
+    def parse_hand(self, player, hand):
         ''' Parses the hand command containing a clients best poker hand'''
-        cards = command.split()[1:]
+        cards = hand[1:]
         selected_cards = []
 
         for card in cards:
@@ -453,7 +460,89 @@ class TCPokerServer:
     async def determine_winner(self):
         ''' Once the all players have submitted their best 5-card poker hands in self.best_hands, 
             Evaluate the winner of the pot and send results. Cleanup state and move onto the next round'''
-        pass
+        evaluated_hands = {}
+
+        for player in self.players:
+            logging.info(f"Evaluating {player.name}'s hand: {self.best_hands[player]}")
+            evaluated_hands[player] = self.evaluate_hand(self.best_hands[player])
+
+        # Sort players by their evaluated hand ranking and relevant cards for breaking ties
+        sorted_players = sorted(evaluated_hands.items(), key=lambda x: x[1], reverse=True)
+
+        # First player in list is the winner
+        winner_player, winner_hand_info = sorted_players[0]
+        loser_player, loser_hand_info = sorted_players[1]
+
+        # Determine the name of the winning hand based on its ranking.
+        hand_rankings = [
+            "High Card", "One Pair", "Two Pair", "Three of a Kind", 
+            "Straight", "Flush", "Full House", "Four of a Kind", 
+            "Straight Flush", "Royal Flush"
+        ]
+
+        winning_hand_name = hand_rankings[winner_hand_info[0]]
+        losing_hand_name = hand_rankings[loser_hand_info[0]]
+        # Broadcast the winner 
+        await self.broadcast({"broadcast": f"{winner_player.name} has won ${self.pot} with a {winning_hand_name}!"})
+        await self.broadcast({"broadcast": f"{winner_player.name} has won the game with the hand: {winning_hand_name} - {self.best_hands[winner_player]}, beating {loser_player.name}'s hand: {losing_hand_name} - {self.best_hands[loser_player]}."})
+        logging.info(f"{winner_player.name} has won the game with the hand: {winning_hand_name} - {self.best_hands[winner_player]}, beating {loser_player.name}'s hand: {losing_hand_name} - {self.best_hands[loser_player]}.")
+        winner_player.stack += self.pot
+        await self.send_message(winner_player, {"broadcast":f"Congratulations on winning! You won ${self.pot}. You now have ${winner_player.stack} in your stack."})
+
+        # TODO: After a game completes and the winner is paid out, start a new round, and have the second player act first. 
+        # self.cleanup()
+
+
+    def evaluate_hand(self, hand):
+        ''' Evaluates a hand and returns its rank and relevant cards for tie-breaking '''
+        # Extract ranks and suits from hand
+        card_ranks = {str(n): n for n in range (2, 10)}
+        card_ranks.update({'T': 10, 'J': 11, 'Q': 12, 'K': 13, 'A': 14})
+        ranks = sorted([card_ranks[card[:-1]] for card in hand], reverse=True)
+        suits = [card[-1] for card in hand]
+        
+        # Check for a flush 
+        is_flush = len(set(suits)) == 1
+
+        # Check for a straight
+        is_straight = ranks == list(range(ranks[0], ranks[0] - 5, -1))
+
+        # Check for an ace-low straight
+        if ranks == [14, 5, 4, 3, 2]:
+            is_straight = True
+            ranks = [5, 4, 3, 2, 1]
+
+        # Count occurrences of each rank
+        rank_counts = Counter(ranks).most_common()
+
+        # Determine hand type based on rank counts and other checks
+        if is_flush and is_straight:
+            return (9 if ranks[0] == 14 else 8, ranks)  # Royal flush or Straight flush
+        
+        elif rank_counts[0][1] == 4:
+            return (7, [rank_counts[0][0], rank_counts[1][0]])  # Four of a kind
+        
+        elif rank_counts[0][1] == 3 and rank_counts[1][1] == 2:
+            return (6, [rank_counts[0][0], rank_counts[1][0]])  # Full house
+        
+        elif is_flush:
+            return (5, ranks)   # Flush
+        
+        elif is_straight:
+            return (4, ranks)   # Straight
+        
+        elif rank_counts[0][1] == 3:
+            return (3, [rank_counts[0][0]] + sorted([rank for rank, count in rank_counts if count == 1], reverse=True))     # Three of a kind
+        
+        elif rank_counts[0][1] == 2 and rank_counts[1][1] == 2:
+            return (2, sorted([rank_counts[0][0], rank_counts[1][0]], reverse=True) + [rank_counts[2][0]])  # Two pair
+        
+        elif rank_counts[0][1] == 2:
+            return (1, [rank_counts[0][0]] + sorted([rank for rank, count in rank_counts if count == 1], reverse=True))     # One pair
+        
+        else: 
+            return (0, ranks)   # High card
+
 
 
 async def main():
