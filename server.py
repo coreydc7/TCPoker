@@ -58,6 +58,10 @@ class TCPokerServer:
         self.game_active = False
         for player in self.players:
             player.hand = []
+            player.ante_placed = False
+            player.hand_placed = False
+            player.last_action = None
+            player.folded = False
         if self.game_task:
             self.game_task.cancel()
             self.game_task = None
@@ -501,7 +505,6 @@ class TCPokerServer:
         winner_player.stack += self.pot
         await self.send_message(winner_player, {"broadcast":f"Congratulations on winning! You won ${self.pot}. You now have ${winner_player.stack} in your stack."})
 
-        # TODO: After one game ends, ensure another round starts up smoothly
         await self.broadcast({"broadcast": "Ending current round, ready up to play another!"})
         await self.broadcast({"game_state": "lobby"})
         self.dealer_position += 1
