@@ -112,6 +112,9 @@ class TCPokerClient:
                 print(f"\nTime to send your best 5-card Poker hand!\nChoose 5 cards from your hand (h1, h2) and the community cards (c1, c2, c3, c4, c5)\nExample command format: hand c1 c2 c3 h1 h2")
                 self.valid_commands = ['hand']
 
+            elif message["action"] == "clear_prompt":
+                self.valid_commands = []
+
         elif "game_state" in message:
             if message["game_state"] == "lobby":
                 print("\nReturning to lobby...")

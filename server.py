@@ -41,6 +41,7 @@ class TCPokerServer:
         self.community_cards = []
         self.game_task = None
         self.current_player = None
+        self.dealer_position = 0    # Who goes first during betting rounds
         self.current_bet = 0
         self.pot_committed = {}     # How much each player has bet during each round
         self.round_complete = False
@@ -149,6 +150,10 @@ class TCPokerServer:
             command = message["command"][0]
 
             if command == "ready":
+                if player.ready:
+                    await self.send_message(player, {"broadcast": "You are already ready, use 'status' to view everyones ready status."})
+                    return
+                
                 player.ready = True
                 await self.broadcast({"broadcast": f"{player.name} is ready."})
                 logging.info(f"{player.name} is ready.")
@@ -167,6 +172,9 @@ class TCPokerServer:
                 if amount <= player.stack:
                     self.pot += amount
                     player.stack -= amount
+                    await self.broadcast({"broadcast": f"{player.name} bets ${amount}. Pot is now ${self.pot}."})
+                    logging.info(f"{player.name} bets ${amount}. Pot: ${self.pot}")
+                    await self.send_message(player, {"action": "clear_prompt"})
                     
                     if not player.ante_placed:
                         player.ante_placed = True
@@ -174,8 +182,6 @@ class TCPokerServer:
                         
                         if not self.ante_event.is_set():
                             await self.send_message(player, {"broadcast": "Waiting for all players to place their ante..."})
-                    await self.broadcast({"broadcast": f"{player.name} bets ${amount}. Pot is now ${self.pot}."})
-                    logging.info(f"{player.name} bets ${amount}. Pot: ${self.pot}")
                 
                 else:
                     await self.send_message(player, {"error": "Bet amount exceeds stack."})
@@ -197,6 +203,7 @@ class TCPokerServer:
                 poker_hand = self.parse_hand(player, message["command"])
                 self.best_hands[player] = poker_hand
                 player.hand_placed = True
+                await self.send_message(player, {"action":"clear_prompt"})
                 self.check_all_hands()  # Check if all best hands are in
 
             else:
@@ -288,10 +295,10 @@ class TCPokerServer:
         self.last_bettor = None
 
         while not self.round_complete:
-            for player in self.players:
+            for i in range(2):
                 if self.round_complete:
                     break
-                await self.handle_player_turn(player)
+                await self.handle_player_turn(self.players[(i + self.dealer_position) % 2])   # Alternates between players each round
 
 
     async def handle_player_turn(self, player):
@@ -383,6 +390,7 @@ class TCPokerServer:
             player.last_action = 'check'
             await self.broadcast({"broadcast": f"{player.name} has checked. Pot: ${self.pot}"})
             logging.info(f"{player.name} has checked. Pot: ${self.pot}")
+            await self.send_message(player, {"action":"clear_prompt"})
             return True
         elif action == 'bet' and self.current_bet == 0:
             if amount >= self.ante and amount <= player.stack:
@@ -394,6 +402,7 @@ class TCPokerServer:
                 self.last_bettor = player
                 await self.broadcast({"broadcast": f"{player.name} has bet ${amount}. Pot: ${self.pot}"})
                 logging.info(f"{player.name} has bet ${amount}. Pot: ${self.pot}")
+                await self.send_message(player, {"action":"clear_prompt"})
                 return True
         elif action == 'call' and self.current_bet > 0:
             to_call = self.current_bet - self.pot_committed[player]
@@ -404,6 +413,7 @@ class TCPokerServer:
                 player.last_action = 'call'
                 await self.broadcast({"broadcast": f"{player.name} has called ${to_call}. Pot: ${self.pot}"})
                 logging.info(f"{player.name} has called ${to_call}. Pot: ${self.pot}")
+                await self.send_message(player, {"action":"clear_prompt"})
                 return True
         elif action == 'raise':
             if amount >= self.current_bet * 2 and amount <= player.stack:
@@ -416,11 +426,13 @@ class TCPokerServer:
                 self.last_bettor = player
                 await self.broadcast({"broadcast": f"{player.name} has raised to ${to_add}. Pot: ${self.pot}"})
                 logging.info(f"{player.name} has raised to ${to_add}. Pot: ${self.pot}")
+                await self.send_message(player, {"action":"clear_prompt"})
                 return True
         elif action == 'fold':
             # TODO: implement fold logic once determining a winner has been implemented
             player.folded = True
             player.last_action = 'fold'
+            await self.send_message(player, {"action":"clear_prompt"})
             return True
         
         return False
@@ -489,8 +501,13 @@ class TCPokerServer:
         winner_player.stack += self.pot
         await self.send_message(winner_player, {"broadcast":f"Congratulations on winning! You won ${self.pot}. You now have ${winner_player.stack} in your stack."})
 
-        # TODO: After a game completes and the winner is paid out, start a new round, and have the second player act first. 
-        # self.cleanup()
+        # TODO: After one game ends, ensure another round starts up smoothly
+        await self.broadcast({"broadcast": "Ending current round, ready up to play another!"})
+        await self.broadcast({"game_state": "lobby"})
+        self.dealer_position += 1
+        for player in self.players:
+            player.ready = False
+        self.cleanup()
 
 
     def evaluate_hand(self, hand):
