@@ -4,14 +4,14 @@ This is a simple Texas Hold'em game implemented over TCP using Python
 
 **How to play:**
 1. **Start the server:** Run the `server.py` script:
-* Required flags are: -i (host IP), -p (Listening port)
+* Required flags are: -p (Listening port)
 * Optional flags are: [-h] (Displays help information)
 2. **Connect clients:** Run the `client.py` script on 2 separate terminals or machines. 
-* Required flags are: -i (IP address of server), -p (Listening port of server), -u (Custom username/identifier)
+* Required flags are: -i (IP address of server), -p (Listening port of server)
 * Optional flags are: [-h] (Displays help information)
   
 3. **Play the game: (work in progress)** \
-   Once enough clients are connected and readied up, the server will automatically start the game of Texas Hold'em. The game is already well defined inside of the class found in poker_offline.py, and the flow is as follows: 
+   Once two clients have connected and readied up, the server will automatically start the game of Texas Hold'em. The game flow is as follows: 
 * Beginning at the pre-flop, the server will request an ante from each client for them to buy into the hand. After every ante is collected, it will deal each client their hole cards and send them to the client. This marks the start of the first betting round.
 * During each betting round, each client will take turns entering their bet action. All other clients wait for their turn, and messages indicating the other clients actions are broadcast to every client. Each client has the option to 'check', 'call', 'raise', or 'fold' their hand.
 * After each betting round, a new card is dealt onto the table, and a new round of betting begins. There are four total betting rounds, where players will have to leverage poker strategy to win the game.
@@ -28,15 +28,17 @@ Sprint 3
 * `client.py`: Client renders game state updates depending on JSON message contents. As the game state is managed by the GameState class, a consistent game state is broadcast to all clients. Each client has a ClientState class to hold information about the state of the client, such as whether it is that clients turn or not. The server synchronizes turn information across all clients, and clients who are waiting receive a "Waiting for X to make a move..." message. Upon initial connection to a server, clients are prompted to submit their own custom username which is used to identify that connected client and track their game state.
 
 Sprint 4 
-* notes: I refactored the entire codebase one day after the Sprint 3 deadline. The functionality is mostly the same, but I was able to do the same thing with less code, as I had a better idea of the execution flow. I also was able to eliminate a race condition that was causing the server to hang only when clients connected/readied up in a specific order. 
+* notes: Most of Sprint 4 was spent continuing to learn the intricacies of asyncio. As this is something new for me, there were several things I was doing incorrectly that was causing unexpected behavior. Although I spent a lot of time refactoring code, in the end I was able to successfully polish the execution flow setup by Sprint 3. I found out how to better handle the clients prompt_toolkit, so the clients command-line UI dynamically updates the list of commands the client is allowed to send. I found a good method for handling player turns and transitioning between the different stages of poker using asyncio Events. I also found out how to handle starting the poker game concurrently alongside the listening and sending of messages by utilizing asyncio Tasks. Overall, merging the poker game and my asyncio client/server has come together quite nicely during this sprint.
+* `server.py`: Merged the state of the server and state of the Poker game under a central class, TCPokerServer. This class manages every aspect of the poker game state, and updates based on messages received from the clients and pre-defined poker logic. The server handles client commands for all stages of the poker game, and constantly updates the clients about the current state through broadcast messages and updating the list of valid commands the client is allowed to send. The server validates user input by updating this list of valid commands for the client, as well as checking to make sure clients have enough money to bet. Once the final betting round has concluded and both clients have sent in their 'hand' commands, the server's determine_winner() function evaluates which 5-card poker hand wins using poker logic. Currently, a winner is only determined after the final betting round, and folding hands isn't fully implemented yet. After the game, players are notified of the winner, and it automatically goes back into the lobby stage. The server cleans up it state, and both players can ready up to play another round of poker. This provides players with the option to play another round, or 'exit' to disconnect from the game.
+* `client.py`: The client-side UI has greatly improved this sprint to be more user-friendly. Information about the game board, player information, and game status are displayed as messages above the client's input prompt. The client's input prompt always displays the valid commands the client can send, so the player knows what moves they are allowed to make. This provides clear and intuitive controls for players to interact with the game. 
   
 **Protocol (work in progress)** \
-Updated 11/4/2024 \
+Updated 11/17/2024 \
 The game flow has been outlined under "Play the game", and the internal protocol for executing this game flow is as follows:
-* When the client script executes, it automatically joins the game, and sends a 'username' message signaling their custom username: ```{ 
+* When the client script executes, it sends a 'username' message signaling the custom username chosen: ```{ 
                 "username": "xyz" 
         }```
-* The server broadcasts messages to all client to inform them of new connections, disconnections, etc. Or it broadcasts a message to a single client if they requested specific information ```{
+* The server broadcasts messages to all client to inform them of pretty much everything, such as connections, disconnections, game state updates such as who won or the pot, etc. It also handles messages sent to individual clients, such as their cards or stack amounts. ```{
                 "broadcast": "Adam has joined the game."
         }```
 * The client sends commands to the server once it has connected. These include commands such as 'status','ready','exit','bet','check','raise','fold',etc. ```{
@@ -47,48 +49,18 @@ The game flow has been outlined under "Play the game", and the internal protocol
                 "action": "collect_ante",
                 "amount": 10
         }```
-* After the antes are paid, The server then sends each client their private hole cards. All 'cards' are an instance of the Card class - Card(suit, rank): ```{
-                "action": "deal_hole_cards",
-                "cards": [Card(suit, rank), Card(suit, rank)]
+* After the antes are paid, The server then sends each client their private hole cards.: ```{
+                "hand": ['T\u2665', 'T\u2663']
         }```
 * For the blind bets and all betting rounds, a similar action can be used with a different message. Server requests a bet amount from the client: ```{
-                "action": "request_bet",
-                "prompt": "Your move: {check, call, raise, fold}.",
+                "action": "collect_bets",
+                "valid_actions": {call, raise, fold}.",
                 "current_bet": 20,
-                "client_balance": 100
-        }```
-* Client response to the betting request: ```{
-                "action": "player_action",
-                "player_id": 1,
-                "move": "raise",
-                "amount": 50
-        }```
-* The action taken by each player will be broadcast from the server to all clients: ```{
-                "action": "broadcast_action",
-                "player_id": 1,
-                "move": "raise",
-                "amount": 50,
-                "message": "Player 1 raises by 50."
-        }```
-* After each betting round, the server will deal community cards and send what they are to each client. There are three stages of dealing community cards (flop, turn, river): ```{
-                "action": "deal_community_cards",
-                "stage": "flop",
-                "cards": [Card(suit, rank), Card(suit, rank), Card(suit, rank)],
-                "message": "Flop: "cards" have been dealt."
-        }```
-* After the final betting round, the server will either automatically determine the winner, or prompt each player to assemble and submit their best 5-card poker hand for determining the winner. I am going back-and-forth on this step a lot, so this will likely change. Example end of game winner announcement, from server: ```{
-                "action": "game_end",
-                "winner": {
-                        "player_id": 2,
-                        "hand": [Card, Card, Card, Card, Card],
-                },
-                "pot": 200,
-                "message": "Player 2 wins the pot of 200 with a Royal Flush!."
+                "to_call": 10,
+                "pot": 20
         }```
 * Invalid commands from clients that would raise errors could be prevented on the client-side, or through an error message sent by the server. ```{
-                "action": "error",
-                "code": 400,
-                "message": "Invalid action. Please choose from {check, call, raise, fold}"
+                "error": "Invalid action. Please choose from {call, raise, fold}."
         }```
                         
         
@@ -96,6 +68,7 @@ The game flow has been outlined under "Play the game", and the internal protocol
 **Technologies used:**
 * Python
 * Sockets
+* Asyncio
 
 **Additional resources:**
 * [Link to Python documentation](https://docs.python.org/3/)
