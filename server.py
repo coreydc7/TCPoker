@@ -267,10 +267,12 @@ class TCPokerServer:
         await self.betting_round()
         # 14. Wait for the final betting round to complete
         await self.betting_round_event.wait()
-        # 15. Have each client assemble their own best 5-card poker hand
-        await self.broadcast({"action": "collect_hands"})
+        # 15. Have each client still in the game assemble their own best 5-card poker hand
+        active_players = [p for p in self.players if not p.folded]
+        if len(active_players) > 1:
+            await self.broadcast({"action": "collect_hands"})
         # 16. Wait for both clients to send in their hands
-        await self.best_hands_event.wait()
+            await self.best_hands_event.wait()
         # 17. Determine who wins the pot based on who has the best poker hand
         await self.determine_winner()
 
@@ -476,34 +478,44 @@ class TCPokerServer:
     async def determine_winner(self):
         ''' Once the all players have submitted their best 5-card poker hands in self.best_hands, 
             Evaluate the winner of the pot and send results. Cleanup state and move onto the next round'''
-        evaluated_hands = {}
+        active_players = [p for p in self.players if not p.folded]
 
-        for player in self.players:
-            logging.info(f"Evaluating {player.name}'s hand: {self.best_hands[player]}")
-            evaluated_hands[player] = self.evaluate_hand(self.best_hands[player])
+        # Game is won if all players but one have folded
+        if len(active_players) == 1:
+            winner_player = active_players[0]
+            logging.info(f"{winner_player.name} has won the ${self.pot} pot as all other players have folded.")
+            await self.broadcast({"broadcast":f"{winner_player.name} has won the ${self.pot} pot as all other players have folded."})
+            winner_player.stack += self.pot
+            await self.send_message(winner_player, {"broadcast":f"Congratulations on winning! You won ${self.pot}. You now have ${winner_player.stack} in your stack."})
+        else:
+            evaluated_hands = {}
 
-        # Sort players by their evaluated hand ranking and relevant cards for breaking ties
-        sorted_players = sorted(evaluated_hands.items(), key=lambda x: x[1], reverse=True)
+            for player in self.players:
+                logging.info(f"Evaluating {player.name}'s hand: {self.best_hands[player]}")
+                evaluated_hands[player] = self.evaluate_hand(self.best_hands[player])
 
-        # First player in list is the winner
-        winner_player, winner_hand_info = sorted_players[0]
-        loser_player, loser_hand_info = sorted_players[1]
+            # Sort players by their evaluated hand ranking and relevant cards for breaking ties
+            sorted_players = sorted(evaluated_hands.items(), key=lambda x: x[1], reverse=True)
 
-        # Determine the name of the winning hand based on its ranking.
-        hand_rankings = [
-            "High Card", "One Pair", "Two Pair", "Three of a Kind", 
-            "Straight", "Flush", "Full House", "Four of a Kind", 
-            "Straight Flush", "Royal Flush"
-        ]
+            # First player in list is the winner
+            winner_player, winner_hand_info = sorted_players[0]
+            loser_player, loser_hand_info = sorted_players[1]
 
-        winning_hand_name = hand_rankings[winner_hand_info[0]]
-        losing_hand_name = hand_rankings[loser_hand_info[0]]
-        # Broadcast the winner 
-        await self.broadcast({"broadcast": f"{winner_player.name} has won ${self.pot} with a {winning_hand_name}!"})
-        await self.broadcast({"broadcast": f"{winner_player.name} has won the game with the hand: {winning_hand_name} - {self.best_hands[winner_player]}, beating {loser_player.name}'s hand: {losing_hand_name} - {self.best_hands[loser_player]}."})
-        logging.info(f"{winner_player.name} has won the game with the hand: {winning_hand_name} - {self.best_hands[winner_player]}, beating {loser_player.name}'s hand: {losing_hand_name} - {self.best_hands[loser_player]}.")
-        winner_player.stack += self.pot
-        await self.send_message(winner_player, {"broadcast":f"Congratulations on winning! You won ${self.pot}. You now have ${winner_player.stack} in your stack."})
+            # Determine the name of the winning hand based on its ranking.
+            hand_rankings = [
+                "High Card", "One Pair", "Two Pair", "Three of a Kind", 
+                "Straight", "Flush", "Full House", "Four of a Kind", 
+                "Straight Flush", "Royal Flush"
+            ]
+
+            winning_hand_name = hand_rankings[winner_hand_info[0]]
+            losing_hand_name = hand_rankings[loser_hand_info[0]]
+            # Broadcast the winner 
+            await self.broadcast({"broadcast": f"{winner_player.name} has won ${self.pot} with a {winning_hand_name}!"})
+            await self.broadcast({"broadcast": f"{winner_player.name} has won the game with the hand: {winning_hand_name} - {self.best_hands[winner_player]}, beating {loser_player.name}'s hand: {losing_hand_name} - {self.best_hands[loser_player]}."})
+            logging.info(f"{winner_player.name} has won the game with the hand: {winning_hand_name} - {self.best_hands[winner_player]}, beating {loser_player.name}'s hand: {losing_hand_name} - {self.best_hands[loser_player]}.")
+            winner_player.stack += self.pot
+            await self.send_message(winner_player, {"broadcast":f"Congratulations on winning! You won ${self.pot}. You now have ${winner_player.stack} in your stack."})
 
         await self.broadcast({"broadcast": "Ending current round, ready up to play another!"})
         await self.broadcast({"game_state": "lobby"})
