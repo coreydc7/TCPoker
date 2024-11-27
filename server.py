@@ -510,12 +510,24 @@ class TCPokerServer:
 
             winning_hand_name = hand_rankings[winner_hand_info[0]]
             losing_hand_name = hand_rankings[loser_hand_info[0]]
-            # Broadcast the winner 
-            await self.broadcast({"broadcast": f"{winner_player.name} has won ${self.pot} with a {winning_hand_name}!"})
-            await self.broadcast({"broadcast": f"{winner_player.name} has won the game with the hand: {winning_hand_name} - {self.best_hands[winner_player]}, beating {loser_player.name}'s hand: {losing_hand_name} - {self.best_hands[loser_player]}."})
-            logging.info(f"{winner_player.name} has won the game with the hand: {winning_hand_name} - {self.best_hands[winner_player]}, beating {loser_player.name}'s hand: {losing_hand_name} - {self.best_hands[loser_player]}.")
-            winner_player.stack += self.pot
-            await self.send_message(winner_player, {"broadcast":f"Congratulations on winning! You won ${self.pot}. You now have ${winner_player.stack} in your stack."})
+
+            # Check for an exact tie
+            if winner_hand_info == loser_hand_info:     # Same hand name and tie breaking cards
+                await self.broadcast({"broadcast": f"How rare! An exact tie! {winner_player.name} and {loser_player.name} split the pot of ${self.pot} with a {winning_hand_name}."})
+                await self.broadcast({"broadcast": f"{winner_player.name} had a {self.best_hands[winner_player]}, and {loser_player.name} had a {self.best_hands[loser_player]}."})
+                logging.info(f"The game ended in an exact tie. Both players had a {winning_hand_name}. ")
+                winner_player.stack += self.pot/2
+                loser_player.stack += self.pot/2
+                await self.send_message(winner_player, {"broadcast":f"Congratulations on winning! You won ${self.pot/2}. You now have ${winner_player.stack} in your stack."})
+                await self.send_message(loser_player, {"broadcast":f"Congratulations on winning! You won ${self.pot/2}. You now have ${loser_player.stack} in your stack."})
+
+            else:
+                # Broadcast the winner 
+                await self.broadcast({"broadcast": f"{winner_player.name} has won ${self.pot} with a {winning_hand_name}!"})
+                await self.broadcast({"broadcast": f"{winner_player.name} has won the game with the hand: {winning_hand_name} - {self.best_hands[winner_player]}, beating {loser_player.name}'s hand: {losing_hand_name} - {self.best_hands[loser_player]}."})
+                logging.info(f"{winner_player.name} has won the game with the hand: {winning_hand_name} - {self.best_hands[winner_player]}, beating {loser_player.name}'s hand: {losing_hand_name} - {self.best_hands[loser_player]}.")
+                winner_player.stack += self.pot
+                await self.send_message(winner_player, {"broadcast":f"Congratulations on winning! You won ${self.pot}. You now have ${winner_player.stack} in your stack."})
 
         await self.broadcast({"broadcast": "Ending current round, ready up to play another!"})
         await self.broadcast({"game_state": "lobby"})
