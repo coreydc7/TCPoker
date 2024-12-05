@@ -5,7 +5,7 @@ This is a simple Texas Hold'em game implemented over TCP using Python
 **How to play:**
 1. **Start the server:** Run the `server.py` script:
 * Required flags are: -p (Listening port)
-* Optional flags are: [-h] (Displays help information)
+* Optional flags are: [-h] (Displays help information) [-s] (Enables automatic hand solver -- Players no longer need to assemble their own best 5-card poker hand from their 2 hole cards + 5 community cards, instead an algorithm will determine what their best possible hand is.)
 2. **Connect clients:** Run the `client.py` script on 2 separate terminals or machines. 
 * Required flags are: -i (IP address of server), -p (Listening port of server)
 * Optional flags are: [-h] (Displays help information)
@@ -69,6 +69,7 @@ The game flow has been outlined under "Play the game", and the internal protocol
 * Python
 * Sockets
 * Asyncio
+* Prompt Toolkit
 
 **Additional resources:**
 * [Link to Python documentation](https://docs.python.org/3/)

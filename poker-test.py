@@ -105,6 +105,20 @@ class TestPoker(unittest.TestCase):
         self.assertEqual(winning_hand_name, "Full House")
         self.assertEqual(winner_hand_info, loser_hand_info)
 
+
+    def test_get_best_hand_high_card(self):
+        ''' Test get_best_hand for proper comparisons '''
+        self.game.players[0].hand = ['K♥', '4♠']
+        self.game.players[1].hand = ['J♥', '3♣']
+        self.game.community_cards = ['2♠', '7♠', '6♣', 'A♣', 'T♣']
+
+        for player in self.game.players:
+            best_hand = self.game.get_best_hand(player.hand + self.game.community_cards)
+            self.game.best_hands[player] = best_hand
+
+        self.assertEqual(self.game.best_hands[self.game.players[0]], ('K♥', '7♠', '6♣', 'A♣', 'T♣'))
+        self.assertEqual(self.game.best_hands[self.game.players[1]], ('J♥', '7♠', '6♣', 'A♣', 'T♣'))
+        
 # suits = ['♠', '♥', '♦', '♣']
 # ranks = ['2', '3', '4', '5', '6', '7', '8', '9', 'T', 'J', 'Q', 'K', 'A']
 if __name__ == '__main__':
