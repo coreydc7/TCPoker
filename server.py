@@ -3,6 +3,7 @@ import json
 import logging
 import argparse
 import random
+from itertools import combinations
 from collections import Counter
 
 logging.basicConfig(
@@ -51,7 +52,8 @@ class TCPokerServer:
         self.current_player_event = asyncio.Event()     # Signals when current players turn is over
         self.betting_round_event = asyncio.Event()  # Signals when the betting round is complete
         self.best_hands_event = asyncio.Event()     # Signals when both players have sent in their best hands
-        
+        self.solver = False     # Enables automatic hand solver
+
     def cleanup(self):
         ''' Cleans up server state if a game in-progress is cancelled '''
         logging.info("Cleaning up game state...")
@@ -267,13 +269,20 @@ class TCPokerServer:
         await self.betting_round()
         # 14. Wait for the final betting round to complete
         await self.betting_round_event.wait()
-        # 15. Have each client still in the game assemble their own best 5-card poker hand
+        # 15. Skip over comparing hands if all but one player has folded
         active_players = [p for p in self.players if not p.folded]
         if len(active_players) > 1:
-            await self.broadcast({"action": "collect_hands"})
-        # 16. Wait for both clients to send in their hands
+        # 16. If automatic solver is set, best hands will be determined automatically. Else clients must submit their own best hands
+            if self.solver:
+                for player in self.players:
+                    best_hand = self.get_best_hand(player.hand + self.community_cards)
+                    self.best_hands[player] = best_hand
+                self.best_hands_event.set() 
+            else:
+                await self.broadcast({"action": "collect_hands"})
+        # 17. Wait for best hands to be received 
             await self.best_hands_event.wait()
-        # 17. Determine who wins the pot based on who has the best poker hand
+        # 18. Determine who wins the pot based on who has the best poker hand
         await self.determine_winner()
 
 
@@ -333,6 +342,11 @@ class TCPokerServer:
             "to_call": self.current_bet - self.pot_committed[player],
             "pot": self.pot
         })
+
+        # Send waiting for turn message to other player
+        for client in self.players:
+            if client != player:
+                await self.send_message(client, {"broadcast":f"It is currently {player.name}'s turn. Please wait your turn."})
 
         # Wait for client action
         await self.current_player_event.wait()
@@ -586,15 +600,29 @@ class TCPokerServer:
         
         else: 
             return (0, ranks)   # High card
+        
 
+    def get_best_hand(self, cards):
+        ''' Algorithmically determines the best 5-card poker hand from players 2 hand cards + 5 community cards '''
+        best_score = (-1, [])
+        best_hand = []
+
+        for hand in combinations(cards, 5):
+            score = self.evaluate_hand(hand)
+            if score > best_score:
+                best_score = score
+                best_hand = hand
+        return best_hand
 
 
 async def main():
     parser = argparse.ArgumentParser(description="TCPoker Server")
     parser.add_argument('-p', '--port', type=int, required=True, help='Port to listen on.')
+    parser.add_argument('-s', '--solve', action='store_true', required=False, help='Enable automatic hand solver.')
     args = parser.parse_args() 
     
     poker_server = TCPokerServer()
+    poker_server.solver = args.solve
     
     # Start TCP server
     server = await asyncio.start_server(poker_server.handle_client, '0.0.0.0', args.port)

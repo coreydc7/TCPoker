@@ -105,7 +105,7 @@ class TCPokerClient:
                 self.valid_commands = ['ante']
 
             elif message["action"] == "collect_bets":
-                print(f"It's your turn!\nThe pot is ${message['pot']}\nThe current bet is ${message['current_bet']}")
+                print(f"\nIt's your turn!\nThe pot is ${message['pot']}\nThe current bet is ${message['current_bet']}")
                 self.valid_commands = message["valid_actions"]
 
             elif message["action"] == "collect_hands":
