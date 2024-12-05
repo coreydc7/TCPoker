@@ -101,7 +101,7 @@ class TCPokerClient:
 
         elif "action" in message:
             if message["action"] == "collect_ante":
-                print(f"\nYou must bet the ante ({message['amount']}) to participate in this hand.")
+                print(f"\nYou must bet atleast the ante ({message['amount']}) to participate in this hand.")
                 self.valid_commands = ['ante']
 
             elif message["action"] == "collect_bets":

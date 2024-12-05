@@ -27,6 +27,7 @@ class Player:
         self.hand_placed = False
         self.last_action = None
         self.folded = False
+        self.total_bet = 0
 
 
 
@@ -64,6 +65,7 @@ class TCPokerServer:
             player.hand_placed = False
             player.last_action = None
             player.folded = False
+            player.total_bet = 0
         if self.game_task:
             self.game_task.cancel()
             self.game_task = None
@@ -144,6 +146,10 @@ class TCPokerServer:
                 print("Ending current game...")
                 await self.broadcast({"broadcast": "Ending current game..."})
                 await self.broadcast({"game_state": "lobby"})
+                # Refund any bets made by the still-connected client
+                for client in self.players:
+                    if client != player:
+                        client.stack += client.total_bet
                 self.cleanup()
     
             writer.close()
@@ -178,6 +184,7 @@ class TCPokerServer:
                 if amount <= player.stack:
                     self.pot += amount
                     player.stack -= amount
+                    player.total_bet += amount
                     await self.broadcast({"broadcast": f"{player.name} bets ${amount}. Pot is now ${self.pot}."})
                     logging.info(f"{player.name} bets ${amount}. Pot: ${self.pot}")
                     await self.send_message(player, {"action": "clear_prompt"})
@@ -198,9 +205,6 @@ class TCPokerServer:
                     
                     if await self.handle_betting_action(player, command, amount):
                         self.current_player_event.set()     # Set event to Move to next players turn
-                    
-                    else:
-                        await self.send_message(player, {"error": "Invalid betting action"})
                 
                 else:
                     await self.send_message(player, {"error": "Please wait your turn"})
@@ -418,23 +422,29 @@ class TCPokerServer:
                 self.pot += amount
                 self.pot_committed[player] = amount
                 player.stack -= amount
+                player.total_bet += amount
                 player.last_action = 'bet'
                 self.last_bettor = player
                 await self.broadcast({"broadcast": f"{player.name} has bet ${amount}. Pot: ${self.pot}"})
                 logging.info(f"{player.name} has bet ${amount}. Pot: ${self.pot}")
                 await self.send_message(player, {"action":"clear_prompt"})
                 return True
+            else:
+                await self.send_message(player, {"broadcast":"Invalid bet. Make sure you have enough money to bet."})
         elif action == 'call' and self.current_bet > 0:
             to_call = self.current_bet - self.pot_committed[player]
             if to_call <= player.stack:
                 self.pot += to_call
                 self.pot_committed[player] = self.current_bet
                 player.stack -= to_call
+                player.total_bet += to_call
                 player.last_action = 'call'
                 await self.broadcast({"broadcast": f"{player.name} has called ${to_call}. Pot: ${self.pot}"})
                 logging.info(f"{player.name} has called ${to_call}. Pot: ${self.pot}")
                 await self.send_message(player, {"action":"clear_prompt"})
                 return True
+            else:
+                await self.send_message(player, {"broadcast":"Invalid call. Make sure you have enough money to call the current bet."})
         elif action == 'raise':
             if amount >= self.current_bet * 2 and amount <= player.stack:
                 to_add = amount - self.pot_committed[player]
@@ -442,14 +452,16 @@ class TCPokerServer:
                 self.current_bet = amount
                 self.pot_committed[player] = amount
                 player.stack -= to_add
+                player.total_bet += to_add
                 player.last_action = 'raise'
                 self.last_bettor = player
                 await self.broadcast({"broadcast": f"{player.name} has raised to ${to_add}. Pot: ${self.pot}"})
                 logging.info(f"{player.name} has raised to ${to_add}. Pot: ${self.pot}")
                 await self.send_message(player, {"action":"clear_prompt"})
                 return True
+            else:
+                await self.send_message(player, {"broadcast":"Invalid raise. You must raise by atleast 2x the current bet. Make sure you have enough money to raise the bet."})
         elif action == 'fold':
-            # TODO: implement fold logic once determining a winner has been implemented
             player.folded = True
             player.last_action = 'fold'
             await self.send_message(player, {"action":"clear_prompt"})
