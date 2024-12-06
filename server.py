@@ -118,6 +118,11 @@ class TCPokerServer:
             if "username" not in message:       # Verify first message received from client is "username"
                 raise ValueError("Client username not found.")
             player = Player(message["username"], writer)        # Create new Player for connected client
+            if len(self.players) >= 2:
+                await self.send_message(player, {"broadcast": "There are already two players, denied connection."})
+                logging.info(f"Denied connection from {addr}, there are already the max number of connections available.")
+                await self.send_message(player, {"action": "clear_prompt"})
+                return
             self.players.append(player)
             logging.info(f"{addr} has chosen the username: {player.name}")
             await self.broadcast({"broadcast": f"{player.name} has joined the game."})      
